@@ -1,3 +1,7 @@
+// Package main es el punto de entrada de la aplicación API Anime.
+// Este archivo contiene ejemplos de uso del scraper de AnimeFlv para demostrar
+// todas las funcionalidades disponibles: búsqueda, información de anime, enlaces
+// de episodios, animes recientes y episodios recientes.
 package main
 
 import (
@@ -8,55 +12,82 @@ import (
 )
 
 func main() {
-	// Usar la interfaz ScraperPort en lugar de la implementación concreta
 	var scraper ports.ScraperPort = animeflv.NewClient()
 
-	// Buscar un anime específico (por ejemplo "One Piece" en la página 1)
 	resultado, err := scraper.SearchAnime("One Piece", "1")
 	if err != nil {
-		fmt.Println("Error al buscar anime:", err)
-		return
+		fmt.Println("Error:", err)
 	}
 
-	fmt.Println("=== RESULTADOS DE BÚSQUEDA ===")
+	fmt.Println("=================Resultado=================")
 	for _, anime := range resultado {
 		fmt.Println("ID:", anime.ID)
-		fmt.Println("Title:", anime.Title)
-		fmt.Println("Sipnopsis:", anime.Sipnopsis)
-		fmt.Println("Tipo:", anime.Tipo)
-		fmt.Println("Punctuation:", anime.Puctuation)
-		fmt.Println("Image:", anime.Image)
-		fmt.Println("------------------------------------")
+		fmt.Println("Titulo:", anime.Title)
+		fmt.Println("Imagen:", anime.Image)
+		fmt.Println("Descripcion:", anime.Sinopsis)
+		fmt.Println("Tipo", anime.Type)
+		fmt.Println("Punctuacion:", anime.Punctuation)
+		fmt.Println("------------------------------------------")
 	}
 
-	// // Obtener información detallada de un anime
 	resultadoInfo, err := scraper.AnimeInfo("one-piece-tv")
 	if err != nil {
-		fmt.Println("Error al obtener info del anime:", err)
-		return
+		fmt.Println("Error:", err)
 	}
-
-	fmt.Println("\n=== INFORMACIÓN DETALLADA ===")
+	fmt.Println("===============Anime Info=================")
 	fmt.Println("ID:", resultadoInfo.ID)
-	fmt.Println("Title:", resultadoInfo.Title)
-	fmt.Println("Sipnopsis:", resultadoInfo.Sipnopsis)
-	fmt.Println("Tipo:", resultadoInfo.Tipo)
-	fmt.Println("Puntuacion:", resultadoInfo.Puctuation)
-	fmt.Println("Image:", resultadoInfo.Image)
-	fmt.Println("Animes Relacionados:", resultadoInfo.AnimeRelated)
-	fmt.Println("Genres:", resultadoInfo.Generos)
-	fmt.Println("Status:", resultadoInfo.Estado)
-	fmt.Println("Episodes:", resultadoInfo.Episodes)
-	fmt.Println("Fecha Siguiente Episodio:", resultadoInfo.NextEpisode)
+	fmt.Println("Titulo:", resultadoInfo.Title)
+	fmt.Println("Imagen:", resultadoInfo.Image)
+	fmt.Println("Descripcion:", resultadoInfo.Sinopsis)
+	fmt.Println("Tipo", resultadoInfo.Type)
+	fmt.Println("Punctuacion:", resultadoInfo.Punctuation)
+	fmt.Println("Estado:", resultadoInfo.Status)
+	fmt.Println("Generos:", resultadoInfo.Genres)
+	fmt.Println("Episodios:", resultadoInfo.Episodes)
+	fmt.Println("Proximo Episodio:", resultadoInfo.NextEpisode)
 
-	linksEpidosde, errorEpisode := scraper.GetLinks("one-piece-tv", 1145)
-	if errorEpisode != nil {
-		fmt.Println("Error al obtener links del episodio:", errorEpisode)
-		return
+	resultadoLinks, err := scraper.Links("one-piece-tv", 1150)
+	if err != nil {
+		fmt.Println("Error:", err)
 	}
-	fmt.Println("=== LINKS DEL EPISODIO ===")
-	fmt.Printf("ID : %s \n", linksEpidosde.ID)
-	fmt.Printf("Título del episodio: %s \n", linksEpidosde.Title)
-	fmt.Printf("Episodio: %d \n", linksEpidosde.Episode)
-	fmt.Printf("Links del episodio: %+v \n", linksEpidosde)
+
+	fmt.Println("===============Links Episodio=================")
+	fmt.Println("ID:", resultadoLinks.ID)
+	fmt.Println("Titulo:", resultadoLinks.Title)
+	fmt.Println("Episodio:", resultadoLinks.Episode)
+	for _, link := range resultadoLinks.Link {
+		fmt.Println("Servidor:", link.Server)
+		fmt.Println("URL:", link.URL)
+		fmt.Println("Code:", link.Code)
+	}
+
+	resultadoRecents, err := scraper.RecentAnime()
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+	fmt.Println("===============Animes Recientes=================")
+	for _, anime := range resultadoRecents {
+		fmt.Println("ID:", anime.ID)
+		fmt.Println("Titulo:", anime.Title)
+		fmt.Println("Imagen:", anime.Image)
+		fmt.Println("Descripcion:", anime.Sinopsis)
+		fmt.Println("Tipo", anime.Type)
+		fmt.Println("Punctuacion:", anime.Punctuation)
+		fmt.Println("------------------------------------------")
+	}
+
+	resultadoEpisodes, err := scraper.RecentEpisode()
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
+	fmt.Println("===============Episodios Recientes=================")
+	for _, episode := range resultadoEpisodes {
+		fmt.Println("ID:", episode.ID)
+		fmt.Println("Titulo:", episode.Title)
+		fmt.Println("Capitulo:", episode.Chapter)
+		fmt.Println("Episodio:", episode.Episode)
+		fmt.Println("Imagen:", episode.Image)
+		fmt.Println("------------------------------------------")
+	}
 }

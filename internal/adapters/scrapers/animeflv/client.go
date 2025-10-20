@@ -1,9 +1,12 @@
+// Package animeflv implementa un cliente scraper para el sitio web AnimeFlv.
+// Este archivo (client.go) contiene la estructura principal del cliente y la implementación
+// de todos los métodos definidos en el port ScraperPort. Se encarga de realizar las
+// peticiones HTTP a AnimeFlv y delegar el parsing del HTML al componente Parser.
 package animeflv
 
 import (
 	"fmt"
-	"net/url"
-	"strings"
+	"net/http"
 
 	"github.com/dst3v3n/api-anime/internal/adapters/scrapers/dto"
 	"github.com/dst3v3n/api-anime/internal/ports"
@@ -26,7 +29,7 @@ func NewClient() ports.ScraperPort {
 	}
 }
 
-func (c *Client) SearchAnime(anime string, page string) ([]dto.SearchAnimeResponse, error) {
+func (c *Client) SearchAnime(anime string, page string) ([]dto.AnimeResponse, error) {
 	if page == "" {
 		page = "1"
 	}
@@ -37,32 +40,56 @@ func (c *Client) SearchAnime(anime string, page string) ([]dto.SearchAnimeRespon
 	}
 
 	searchURL := buildURL(c.config.SearchURL, params)
-	return c.parser.ParseSearchAnime(searchURL)
-}
-
-func (c *Client) AnimeInfo(idAnime string) (dto.ResponseAnimeInfo, error) {
-	idAnime = strings.ToLower(idAnime)
-	animeURL := c.config.AnimeInfoURL + "/" + idAnime
-	return c.parser.ParseAnimeInfo(animeURL, idAnime)
-}
-
-func (c *Client) GetLinks(idAnime string, episode int) (dto.GetLinkResponse, error) {
-	idAnime = strings.ToLower(idAnime)
-	episodeURL := fmt.Sprintf("%s/%s-%d", c.config.VerEpisodeURL, idAnime, episode)
-	return c.parser.ParseGetLinks(episodeURL, idAnime, episode)
-}
-
-func buildURL(baseURL string, params map[string]string) string {
-	u, err := url.Parse(baseURL)
+	resp, err := http.Get(searchURL)
 	if err != nil {
-		return baseURL
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return c.parser.ParseAnime(resp.Body)
+}
+
+func (c *Client) AnimeInfo(idAnime string) (dto.AnimeInfoResponse, error) {
+	searhURL := c.config.AnimeInfoURL + "/" + idAnime
+	resp, err := http.Get(searhURL)
+	if err != nil {
+		return dto.AnimeInfoResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	return c.parser.ParseAnimeInfo(resp.Body, idAnime)
+}
+
+func (c *Client) Links(idAnime string, episode int) (dto.LinkResponse, error) {
+	searchURL := fmt.Sprintf("%s/%s-%d", c.config.VerEpisodeURL, idAnime, episode)
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		return dto.LinkResponse{}, err
 	}
 
-	query := u.Query()
-	for key, value := range params {
-		query.Add(key, value)
+	defer resp.Body.Close()
+
+	return c.parser.ParseLinks(resp.Body, idAnime, episode)
+}
+
+func (c *Client) RecentAnime() ([]dto.AnimeResponse, error) {
+	searchURL := c.config.BaseURL
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		return nil, err
 	}
 
-	u.RawQuery = query.Encode()
-	return u.String()
+	defer resp.Body.Close()
+
+	return c.parser.ParseAnime(resp.Body)
+}
+
+func (c *Client) RecentEpisode() ([]dto.EpisodeListResponse, error) {
+	searchURL := c.config.BaseURL
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return c.parser.ParseRecentEpisode(resp.Body)
 }

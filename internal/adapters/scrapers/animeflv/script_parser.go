@@ -1,3 +1,10 @@
+// Package animeflv - script_parser.go
+// Este archivo se especializa en extraer y parsear datos embebidos en etiquetas <script>
+// del HTML de AnimeFlv. Utiliza expresiones regulares para encontrar variables JavaScript
+// que contienen información estructurada en formato JSON sobre:
+// - Lista de episodios disponibles
+// - Información de próximos episodios
+// - Enlaces de servidores de video para reproducción
 package animeflv
 
 import (

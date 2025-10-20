@@ -1,19 +1,23 @@
-// Package animeflv provides HTML parsing functionality for the AnimeFlv website.
+// Package animeflv - html_parser.go
+// Este archivo contiene la lógica principal de parsing HTML del sitio AnimeFlv.
+// Utiliza goquery para analizar el DOM HTML y extraer información estructurada sobre:
+// - Búsqueda de animes
+// - Información detallada de anime (géneros, estado, episodios, animes relacionados)
+// - Enlaces de reproducción de episodios
+// - Listado de episodios recientes
+// Define todos los selectores CSS necesarios y coordina el proceso de extracción y mapeo de datos.
 package animeflv
 
 import (
-	"fmt"
-	"strconv"
+	"html"
+	"io"
+	"regexp"
 	"strings"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
+	"github.com/PuerkitoBio/goquery"
 	"github.com/dst3v3n/api-anime/internal/adapters/scrapers/dto"
-	"github.com/gocolly/colly"
 )
 
-// CSS selectors constants
 const (
 	selectorSearchArticle      = "ul.ListAnimes > li > article"
 	selectorArticleLink        = "a"
@@ -32,237 +36,191 @@ const (
 	selectorInfoImage       = "div.Image img"
 	selectorInfoGenres      = "nav.Nvgnrs a"
 	selectorInfoRelated     = "ul.ListAnmRel > li"
+
+	selectorEpisodeList        = "ul.ListEpisodios > li"
+	selectorEpisodeListTitle   = "strong.Title"
+	selectorEpisodeListChapter = "span.Capi"
 )
 
-// Parser maneja el parseo de HTML de AnimeFlv
 type Parser struct {
-	collector *colly.Collector
-	mapper    *Maper
+	mapper *Maper
 }
 
-// NewParser crea una nueva instancia del parser
 func NewParser() *Parser {
 	return &Parser{
-		collector: colly.NewCollector(
-			colly.AllowedDomains("www3.animeflv.net")),
 		mapper: NewMaper(),
 	}
 }
 
-// ParseSearchAnime parsea los resultados de búsqueda
-func (p *Parser) ParseSearchAnime(url string) ([]dto.SearchAnimeResponse, error) {
-	c := p.collector.Clone()
-	var results []dto.SearchAnimeResponse
-	var parseErrors []error
+func (p *Parser) ParseAnime(htmlElement io.Reader) ([]dto.AnimeResponse, error) {
+	results := []dto.AnimeResponse{}
+	doc, err := goquery.NewDocumentFromReader(htmlElement)
+	if err != nil {
+		return results, err
+	}
 
-	c.OnHTML(selectorSearchArticle, func(e *colly.HTMLElement) {
-		// Extract ID
-		href := e.ChildAttr(selectorArticleLink, "href")
+	doc.Find(selectorSearchArticle).Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Find(selectorArticleLink).Attr("href")
 		id, err := extractID(href)
 		if err != nil {
-			parseErrors = append(parseErrors, fmt.Errorf("failed to extract ID from href %s: %w", href, err))
 			return
 		}
 
-		// Extract and normalize category
-		title := e.ChildText(selectorArticleTitle)
-		category := e.ChildText(selectorArticleCategory)
-		category = cases.Title(language.Spanish).String(strings.ToLower(category))
-
-		// Extract punctuation with fallback
-		punctuation := e.ChildText(selectorArticlePunctuation)
-		puntuacion, err := parseFloat(punctuation)
+		image, _ := s.Find(selectorArticleImage).Attr("src")
+		tipo, _ := s.Find(selectorArticleCategory).Html()
+		title, _ := s.Find(selectorArticleTitle).Html()
+		punctuationStr, _ := s.Find(selectorArticlePunctuation).Html()
+		punctuation, err := parseFloat(punctuationStr)
 		if err != nil {
-			puntuacion = 0.0 // Fallback to 0 if parsing fails
+			return
 		}
 
-		// Extract remaining fields
-		image := e.ChildAttr(selectorArticleImage, "src")
-		sipnopsis := e.ChildText(selectorArticleSynopsis)
+		sinopsis, _ := s.Find(selectorArticleSynopsis).Html()
+		sinopsis = html.UnescapeString(sinopsis)
 
-		results = append(results, p.mapper.ToSearchAnime(id, title, sipnopsis, category, puntuacion, image))
+		results = append(results, p.mapper.ToAnime(id, title, sinopsis, tipo, punctuation, image))
 	})
-
-	if err := c.Visit(url); err != nil {
-		return nil, fmt.Errorf("failed to visit URL %s: %w", url, err)
-	}
-
-	// If we have parse errors but also results, log them but don't fail
-	if len(parseErrors) > 0 && len(results) == 0 {
-		return nil, fmt.Errorf("all items failed to parse: %d errors", len(parseErrors))
-	}
-
 	return results, nil
 }
 
-// ParseAnimeInfo parsea la información detallada de un anime
-func (p *Parser) ParseAnimeInfo(url string, idAnime string) (dto.ResponseAnimeInfo, error) {
-	c := p.collector.Clone()
-	result := &ParseResult{}
-	var scrapeError error
+func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.AnimeInfoResponse, error) {
+	doc, err := goquery.NewDocumentFromReader(htmlElement)
+	if err != nil {
+		return dto.AnimeInfoResponse{}, err
+	}
 
-	// Process scripts first
-	c.OnHTML("script", func(e *colly.HTMLElement) {
-		scriptContent := e.Text
+	result := &ParseResult{}
+
+	doc.Find("script").Each(func(_ int, s *goquery.Selection) {
+		scriptContent := s.Text()
 		if strings.Contains(scriptContent, "var episodes") {
-			episodes, nextEp, err := getEpisodeInfo(scriptContent)
+			episodes, nextEpisode, err := getEpisodeInfo(scriptContent)
 			if err != nil {
-				// Don't fail, just log and continue
 				result.episodes = []int{}
 				result.nextEpisode = ""
 				return
 			}
 			result.episodes = episodes
-			result.nextEpisode = nextEp
+			result.nextEpisode = nextEpisode
 		}
 	})
 
-	// Process main content
-	c.OnHTML(selectorBodyContainer, func(e *colly.HTMLElement) {
-		result.title = e.ChildText(selectorInfoTitle)
-		result.category = e.ChildText(selectorInfoCategory)
-		result.sipnopsis = e.ChildText(selectorInfoSynopsis)
-		result.estado = e.ChildText(selectorInfoStatus)
+	doc.Find(selectorBodyContainer).Each(func(_ int, s *goquery.Selection) {
+		result.title, _ = s.Find(selectorInfoTitle).Html()
+		result.category, _ = s.Find(selectorInfoCategory).Html()
+		result.image, _ = s.Find(selectorInfoImage).Attr("src")
 
-		punctuation := e.ChildText(selectorInfoPunctuation)
-		puntuacion, err := parseFloat(punctuation)
-		if err != nil {
-			puntuacion = 0.0
-		}
-		result.puntuacion = puntuacion
-		result.image = e.ChildAttr(selectorInfoImage, "src")
-
-		// Extract genres
-		e.ForEach(selectorInfoGenres, func(i int, el *colly.HTMLElement) {
-			result.generos = append(result.generos, el.Text)
+		s.Find(selectorInfoGenres).Each(func(_ int, genreSel *goquery.Selection) {
+			result.genres = append(result.genres, genreSel.Text())
 		})
 
-		// Extract related anime
-		e.ForEach(selectorInfoRelated, func(i int, el *colly.HTMLElement) {
-			href := el.ChildAttr(selectorArticleLink, "href")
+		sinopsis, _ := s.Find(selectorInfoSynopsis).Html()
+		result.sipnopsis = html.UnescapeString(sinopsis)
+		result.status, _ = s.Find(selectorInfoStatus).Html()
+		punctuationStr, _ := s.Find(selectorInfoPunctuation).Html()
+		result.punctuacion, err = parseFloat(punctuationStr)
+		if err != nil {
+			return
+		}
+
+		s.Find(selectorInfoRelated).Each(func(_ int, relatedSel *goquery.Selection) {
+			href, _ := relatedSel.Find(selectorArticleLink).Attr("href")
+			title := relatedSel.Find(selectorArticleLink).Text()
+
 			id, err := extractID(href)
 			if err != nil {
-				return // Skip this item if ID extraction fails
+				return
 			}
 
-			titleRel := el.ChildText(selectorArticleLink)
-			textoCompleto := el.Text
-			categoryRel := strings.TrimSpace(strings.TrimPrefix(textoCompleto, titleRel))
-			categoryRel = replaceParenthesis(categoryRel)
+			fullText := relatedSel.Text()
+
+			re := regexp.MustCompile(`\((.*?)\)`)
+			matches := re.FindStringSubmatch(fullText)
+
+			relationType := ""
+			if len(matches) > 1 {
+				relationType = matches[1]
+			}
 
 			result.animeRelated = append(result.animeRelated, dto.AnimeRelated{
 				ID:       id,
-				Title:    titleRel,
-				Category: categoryRel,
+				Title:    title,
+				Category: relationType,
 			})
 		})
 	})
 
-	// Build final result after processing
-	var finalResultado dto.ResponseAnimeInfo
-	c.OnScraped(func(r *colly.Response) {
-		finalResultado = p.mapper.ToAnimeInfo(
-			idAnime,
-			result.title,
-			result.sipnopsis,
-			result.category,
-			result.puntuacion,
-			result.image,
-			result.animeRelated,
-			result.generos,
-			result.estado,
-			result.episodes,
-			result.nextEpisode,
-		)
-	})
+	resultFinal := p.mapper.ToAnimeInfo(
+		idAnime,
+		result.title,
+		result.sipnopsis,
+		result.category,
+		result.punctuacion,
+		result.image,
+		result.animeRelated,
+		result.genres,
+		result.status,
+		result.episodes,
+		result.nextEpisode,
+	)
 
-	// Error handling
-	c.OnError(func(r *colly.Response, err error) {
-		scrapeError = err
-	})
-
-	if err := c.Visit(url); err != nil {
-		return dto.ResponseAnimeInfo{}, fmt.Errorf("failed to visit URL %s: %w", url, err)
-	}
-
-	if scrapeError != nil {
-		return dto.ResponseAnimeInfo{}, fmt.Errorf("scraping error: %w", scrapeError)
-	}
-
-	return finalResultado, nil
+	return resultFinal, nil
 }
 
-func (p *Parser) ParseGetLinks(url string, idAnime string, episode int) (dto.GetLinkResponse, error) {
-	c := p.collector.Clone()
-	result := &ParseEpisodeLinksResult{
-		ID:      idAnime,
-		Episode: episode,
+func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum int) (dto.LinkResponse, error) {
+	doc, err := goquery.NewDocumentFromReader(htmlElement)
+	if err != nil {
+		return dto.LinkResponse{}, err
 	}
 
-	c.OnHTML("script[type=\"text/javascript\"]", func(e *colly.HTMLElement) {
-		scriptContent := e.Text
+	result := &ParseEpisodeLinksResult{
+		ID:      idAnime,
+		Episode: episodeNum,
+	}
+
+	doc.Find("script[type=\"text/javascript\"]").Each(func(_ int, s *goquery.Selection) {
+		scriptContent := s.Text()
 		if strings.Contains(scriptContent, "var videos") {
-			links, error := GetScriptLinksEpisode(scriptContent)
-			if error != nil {
+			links, err := GetScriptLinksEpisode(scriptContent)
+			if err != nil {
 				return
 			}
 			result.links = links
 		}
 	})
 
-	c.OnHTML("body", func(e *colly.HTMLElement) {
-		result.Title = e.ChildText(selectorInfoTitle)
+	doc.Find(selectorBodyContainer).Each(func(_ int, s *goquery.Selection) {
+		result.Title, _ = s.Find(selectorInfoTitle).Html()
 	})
 
-	var resultFinal dto.GetLinkResponse
-	c.OnScraped(func(r *colly.Response) {
-		resultFinal = p.mapper.ToLinkEpisode(result.ID, result.Title, result.Episode, result.links)
+	return p.mapper.ToLinkEpisode(result.ID, result.Title, result.Episode, result.links), nil
+}
+
+func (p *Parser) ParseRecentEpisode(htmlElement io.Reader) ([]dto.EpisodeListResponse, error) {
+	doc, err := goquery.NewDocumentFromReader(htmlElement)
+	if err != nil {
+		return []dto.EpisodeListResponse{}, err
+	}
+	result := []dto.EpisodeListResponse{}
+
+	doc.Find(selectorEpisodeList).Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Find(selectorArticleLink).Attr("href")
+		id, err := extractID(href)
+		if err != nil {
+			return
+		}
+
+		episode, err := extractEpisodeNumber(href)
+		if err != nil {
+			return
+		}
+
+		id = removeTrailingNumber(id)
+		title, _ := s.Find(selectorEpisodeListTitle).Html()
+		chapter := s.Find(selectorEpisodeListChapter).Text()
+		image, _ := s.Find(selectorArticleImage).Attr("src")
+
+		result = append(result, p.mapper.ToRecentEpisode(id, title, chapter, episode, image))
 	})
-
-	if err := c.Visit(url); err != nil {
-		return dto.GetLinkResponse{}, fmt.Errorf("failed to visit URL %s: %w", url, err)
-	}
-
-	return resultFinal, nil
-}
-
-// Helper functions
-
-func replaceParenthesis(text string) string {
-	text = strings.ReplaceAll(text, "(", "")
-	text = strings.ReplaceAll(text, ")", "")
-	return text
-}
-
-func getEpisodeInfo(scriptContent string) ([]int, string, error) {
-	episodios, err := GetScriptEpisodeList(scriptContent)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to get episode list: %w", err)
-	}
-
-	nextEpisode, err := GetScriptInfo(scriptContent)
-	if err != nil {
-		return episodios, "", fmt.Errorf("failed to get next episode info: %w", err)
-	}
-
-	return episodios, nextEpisode, nil
-}
-
-func parseFloat(value string) (float64, error) {
-	if value == "" {
-		return 0.0, fmt.Errorf("empty string, cannot parse to float")
-	}
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0.0, fmt.Errorf("invalid float format %q: %w", value, err)
-	}
-	return parsed, nil
-}
-
-func extractID(href string) (string, error) {
-	parts := strings.Split(href, "/")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("invalid href format: %s", href)
-	}
-	return parts[2], nil
+	return result, nil
 }
