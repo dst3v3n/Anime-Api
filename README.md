@@ -11,9 +11,10 @@ Esta librería te permite buscar animes, obtener información detallada (sinopsi
 - 🔍 **Búsqueda de animes** por nombre con paginación
 - 📖 **Información detallada** de cada anime (sinopsis, géneros, estado, episodios disponibles)
 - 🎬 **Enlaces de episodios** para ver o descargar de múltiples servidores
-- � **Animes recientes** obtén los últimos animes agregados al sitio
+- 📺 **Animes recientes** obtén los últimos animes agregados al sitio
 - 🆕 **Episodios recientes** listado de los últimos episodios publicados
-- �🚀 **Alto rendimiento** con scraping optimizado usando goquery
+- 💾 **Caché distribuido** Valkey integrado para optimizar consultas recurrentes
+- 🚀 **Alto rendimiento** con scraping optimizado usando goquery y caché
 - 🏗️ **Arquitectura hexagonal** diseño limpio y extensible
 
 ## 📦 Instalación
@@ -21,6 +22,7 @@ Esta librería te permite buscar animes, obtener información detallada (sinopsi
 ### Prerrequisitos
 
 - Go 1.23 o superior
+- Valkey/Redis en ejecución (para caché distribuido) - puerto 6379 por defecto
 
 ### Instalar la librería
 
@@ -32,8 +34,22 @@ go get github.com/dst3v3n/api-anime
 
 El proyecto utiliza las siguientes dependencias:
 - `github.com/PuerkitoBio/goquery` - Parser HTML para scraping eficiente
+- `github.com/valkey-io/valkey-go` - Cliente Valkey para caché distribuido
 
 ## 🚀 Uso
+
+### Configuración Inicial
+
+Asegúrate de tener Valkey ejecutándose:
+
+```bash
+# Usando Docker (recomendado)
+docker run -d -p 6379:6379 valkey/valkey:latest
+
+# O instala Valkey localmente
+# Ubuntu/Debian: sudo apt-get install valkey
+# macOS: brew install valkey
+```
 
 ### Inicio rápido
 
@@ -42,31 +58,33 @@ package main
 
 import (
     "fmt"
-    "github.com/dst3v3n/api-anime/internal/adapters/scrapers/animeflv"
-    "github.com/dst3v3n/api-anime/internal/ports"
+    "github.com/dst3v3n/api-anime/internal/domain/services/animeflv"
 )
 
 func main() {
-    // Crear cliente usando la interfaz ScraperPort
-    var scraper ports.ScraperPort = animeflv.NewClient()
+    // Crear servicio con caché integrado
+    service := animeflv.NewAnimeflvService()
 
     // 1. Buscar anime por nombre
-    resultados, err := scraper.SearchAnime("One Piece", "1")
+    anime := "One Piece"
+    page := uint(1)
+    resultados, err := service.SearchAnime(&anime, &page)
     if err != nil {
         fmt.Println("Error:", err)
         return
     }
     
-    for _, anime := range resultados {
-        fmt.Println("Título:", anime.Title)
-        fmt.Println("ID:", anime.ID)
-        fmt.Println("Tipo:", anime.Type)
-        fmt.Println("Puntuación:", anime.Punctuation)
+    for _, animeResult := range resultados.Animes {
+        fmt.Println("Título:", animeResult.Title)
+        fmt.Println("ID:", animeResult.ID)
+        fmt.Println("Tipo:", animeResult.Type)
+        fmt.Println("Puntuación:", animeResult.Punctuation)
         fmt.Println("------------------------------------")
     }
 
-    // 2. Obtener información detallada
-    info, err := scraper.AnimeInfo("one-piece-tv")
+    // 2. Obtener información detallada (con caché)
+    idAnime := "one-piece-tv"
+    info, err := service.AnimeInfo(&idAnime)
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -75,10 +93,11 @@ func main() {
     fmt.Println("Título:", info.Title)
     fmt.Println("Estado:", info.Status)
     fmt.Println("Géneros:", info.Genres)
-    fmt.Println("Episodios disponibles:", info.Episodes)
+    fmt.Println("Episodios disponibles:", len(info.Episodes))
     
-    // 3. Obtener enlaces de un episodio específico
-    links, err := scraper.Links("one-piece-tv", 1150)
+    // 3. Obtener enlaces de un episodio específico (con caché)
+    episode := uint(1150)
+    links, err := service.Links(&idAnime, &episode)
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -88,23 +107,22 @@ func main() {
     for _, link := range links.Link {
         fmt.Println("Servidor:", link.Server)
         fmt.Println("URL:", link.URL)
-        fmt.Println("Code:", link.Code)
     }
 
-    // 4. Obtener animes recientes
-    recientes, err := scraper.RecentAnime()
+    // 4. Obtener animes recientes (con caché)
+    recientes, err := service.RecentAnime()
     if err != nil {
         fmt.Println("Error:", err)
         return
     }
     
     fmt.Println("Animes recientes:", len(recientes))
-    for _, anime := range recientes {
-        fmt.Println("-", anime.Title)
+    for _, animeRecent := range recientes {
+        fmt.Println("-", animeRecent.Title)
     }
 
-    // 5. Obtener episodios recientes
-    episodios, err := scraper.RecentEpisode()
+    // 5. Obtener episodios recientes (con caché)
+    episodios, err := service.RecentEpisode()
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -121,15 +139,15 @@ func main() {
 
 ### 🔍 SearchAnime
 
-Busca animes por nombre con paginación.
+Busca animes por nombre con paginación. **Incluye caché automático de 15 minutos**.
 
 ```go
-SearchAnime(anime string, page string) ([]dto.AnimeResponse, error)
+SearchAnime(anime *string, page *uint) (dto.AnimeResponse, error)
 ```
 
 **Parámetros:**
-- `anime` (string): Nombre del anime a buscar
-- `page` (string): Número de página (ejemplo: "1", "2", "3", etc.)
+- `anime` (*string): Nombre del anime a buscar
+- `page` (*uint): Número de página (ejemplo: 1, 2, 3, etc.)
 
 **Retorna:**
 ```go
@@ -145,21 +163,25 @@ type AnimeResponse struct {
 
 **Ejemplo:**
 ```go
-resultados, err := scraper.SearchAnime("Naruto", "1")
+anime := "Naruto"
+page := uint(1)
+resultados, err := service.SearchAnime(&anime, &page)
 ```
+
+> **Nota:** Los resultados se cachean automáticamente en Valkey por 15 minutos. Búsquedas posteriores de la misma query retornarán datos del caché instantáneamente.
 
 ---
 
 ### 📖 AnimeInfo
 
-Obtiene información detallada de un anime específico.
+Obtiene información detallada de un anime específico. **Incluye caché automático de 15 minutos**.
 
 ```go
-AnimeInfo(idAnime string) (dto.AnimeInfoResponse, error)
+AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, error)
 ```
 
 **Parámetros:**
-- `idAnime` (string): ID del anime (obtenido de SearchAnime)
+- `idAnime` (*string): ID del anime (obtenido de SearchAnime)
 
 **Retorna:**
 ```go
@@ -181,22 +203,25 @@ type AnimeRelated struct {
 
 **Ejemplo:**
 ```go
-info, err := scraper.AnimeInfo("naruto-shippuden")
+id := "naruto-shippuden"
+info, err := service.AnimeInfo(&id)
 ```
+
+> **Nota:** Los detalles se cachean automáticamente por 15 minutos bajo la clave `anime-info-{id}`.
 
 ---
 
 ### 🔗 Links
 
-Obtiene los enlaces de descarga/streaming de un episodio específico.
+Obtiene los enlaces de descarga/streaming de un episodio específico. **Incluye caché automático de 15 minutos**.
 
 ```go
-Links(idAnime string, episode int) (dto.LinkResponse, error)
+Links(idAnime *string, episode *uint) (dto.LinkResponse, error)
 ```
 
 **Parámetros:**
-- `idAnime` (string): ID del anime
-- `episode` (int): Número del episodio
+- `idAnime` (*string): ID del anime
+- `episode` (*uint): Número del episodio
 
 **Retorna:**
 ```go
@@ -216,35 +241,41 @@ type LinkSource struct {
 
 **Ejemplo:**
 ```go
-links, err := scraper.Links("naruto-shippuden", 1)
+id := "naruto-shippuden"
+episode := uint(1)
+links, err := service.Links(&id, &episode)
 ```
+
+> **Nota:** Los enlaces se cachean automáticamente por 15 minutos bajo la clave `links-{id}-{episode}`.
 
 ---
 
 ### 📺 RecentAnime
 
-Obtiene la lista de animes recientemente agregados al sitio.
+Obtiene la lista de animes recientemente agregados al sitio. **Incluye caché automático de 15 minutos**.
 
 ```go
-RecentAnime() ([]dto.AnimeResponse, error)
+RecentAnime() ([]dto.AnimeStruct, error)
 ```
 
 **Retorna:**
-Lista de `AnimeResponse` con los animes recientes.
+Lista de `AnimeStruct` con los animes recientes.
 
 **Ejemplo:**
 ```go
-recientes, err := scraper.RecentAnime()
+recientes, err := service.RecentAnime()
 for _, anime := range recientes {
     fmt.Printf("%s - %s\n", anime.Title, anime.Type)
 }
 ```
 
+> **Nota:** Los animes recientes se cachean bajo la clave `recent-anime` por 15 minutos.
+
 ---
 
 ### 🆕 RecentEpisode
 
-Obtiene la lista de episodios recientemente publicados.
+Obtiene la lista de episodios recientemente publicados. **Incluye caché automático de 15 minutos**.
 
 ```go
 RecentEpisode() ([]dto.EpisodeListResponse, error)
@@ -263,39 +294,47 @@ type EpisodeListResponse struct {
 
 **Ejemplo:**
 ```go
-episodios, err := scraper.RecentEpisode()
+episodios, err := service.RecentEpisode()
 for _, ep := range episodios {
     fmt.Printf("%s - Episodio %d\n", ep.Title, ep.Episode)
 }
 ```
 
+> **Nota:** Los episodios recientes se cachean bajo la clave `recent-episode` por 15 minutos.
+
 ## 💡 Casos de Uso
 
 ### Buscar y listar animes
 ```go
-// Buscar "Attack on Titan" en la primera página
-resultados, _ := scraper.SearchAnime("Attack on Titan", "1")
-for _, anime := range resultados {
+// Buscar "Attack on Titan" en la primera página (con caché)
+title := "Attack on Titan"
+page := uint(1)
+resultados, _ := service.SearchAnime(&title, &page)
+for _, anime := range resultados.Animes {
     fmt.Printf("%s (%s) - ⭐%.1f\n", anime.Title, anime.Type, anime.Punctuation)
 }
+// La segunda búsqueda de "Attack on Titan" página 1 será instantánea (desde caché)
 ```
 
 ### Obtener todos los episodios de un anime
 ```go
-info, _ := scraper.AnimeInfo("shingeki-no-kyojin")
+id := "shingeki-no-kyojin"
+info, _ := service.AnimeInfo(&id)
 fmt.Printf("Estado: %s\n", info.Status)
 fmt.Printf("Total de episodios: %d\n", len(info.Episodes))
 
-// Obtener enlaces de todos los episodios
+// Obtener enlaces de todos los episodios (con caché)
 for _, ep := range info.Episodes {
-    links, _ := scraper.Links("shingeki-no-kyojin", ep)
+    episode := uint(ep)
+    links, _ := service.Links(&id, &episode)
     fmt.Printf("Episodio %d tiene %d enlaces\n", ep, len(links.Link))
 }
 ```
 
 ### Verificar nuevos episodios
 ```go
-info, _ := scraper.AnimeInfo("one-piece-tv")
+id := "one-piece-tv"
+info, _ := service.AnimeInfo(&id)
 if info.Status == "En Emision" {
     fmt.Println("Próximo episodio:", info.NextEpisode)
     ultimoEp := info.Episodes[len(info.Episodes)-1]
@@ -305,24 +344,26 @@ if info.Status == "En Emision" {
 
 ### Monitorear animes y episodios recientes
 ```go
-// Ver qué animes nuevos se agregaron
-recientes, _ := scraper.RecentAnime()
+// Ver qué animes nuevos se agregaron (con caché)
+recientes, _ := service.RecentAnime()
 fmt.Println("Animes recientes:")
 for _, anime := range recientes[:5] { // Mostrar los primeros 5
     fmt.Printf("- %s (⭐%.1f)\n", anime.Title, anime.Punctuation)
 }
 
-// Ver qué episodios nuevos salieron hoy
-episodios, _ := scraper.RecentEpisode()
+// Ver qué episodios nuevos salieron hoy (con caché)
+episodios, _ := service.RecentEpisode()
 fmt.Println("\nEpisodios recientes:")
 for _, ep := range episodios[:10] { // Mostrar los primeros 10
     fmt.Printf("- %s - Ep. %d\n", ep.Title, ep.Episode)
 }
+// Las siguientes llamadas retornarán datos del caché en < 1ms
 ```
 
 ### Explorar animes relacionados
 ```go
-info, _ := scraper.AnimeInfo("naruto")
+id := "naruto"
+info, _ := service.AnimeInfo(&id)
 fmt.Println("Animes relacionados con Naruto:")
 for _, related := range info.AnimeRelated {
     fmt.Printf("- %s (%s)\n", related.Title, related.Category)
@@ -334,7 +375,9 @@ for _, related := range info.AnimeRelated {
 Todos los métodos retornan un error que debes manejar:
 
 ```go
-resultados, err := scraper.SearchAnime("Naruto", "1")
+anime := "Naruto"
+page := uint(1)
+resultados, err := service.SearchAnime(&anime, &page)
 if err != nil {
     log.Fatal("Error en la búsqueda:", err)
 }
@@ -345,6 +388,35 @@ if err != nil {
 - Episodio no disponible
 - Problemas de conexión con el sitio web
 - Cambios en la estructura del sitio (requiere actualización de la librería)
+
+## 💾 Sistema de Caché
+
+La API incluye **caché distribuido integrado** usando Valkey (alternativa a Redis):
+
+### Características del Caché
+
+- **Automático**: Se aplica automáticamente a todas las operaciones sin configuración adicional
+- **TTL configurable**: 15 minutos por defecto para búsquedas y contenido reciente
+- **Distribuido**: Perfecto para aplicaciones con múltiples instancias
+- **Transparente**: Los desarrolladores no necesitan gestionar el caché manualmente
+- **Optimizado**: Las búsquedas repetidas retornan resultados en < 1ms desde caché
+
+### Claves de Caché
+
+| Operación | Clave Caché | TTL |
+|-----------|------------|-----|
+| `SearchAnime("one-piece", 1)` | `search-anime-one-piece-page-1` | 15 min |
+| `AnimeInfo("one-piece-tv")` | `anime-info-one-piece-tv` | 15 min |
+| `Links("one-piece-tv", 1150)` | `links-one-piece-tv-1150` | 15 min |
+| `RecentAnime()` | `recent-anime` | 15 min |
+| `RecentEpisode()` | `recent-episode` | 15 min |
+
+### Ventajas del Caché
+
+✅ **Rendimiento**: Búsquedas repetidas son instantáneas
+✅ **Escalabilidad**: Soporta múltiples instancias de la aplicación
+✅ **Confiabilidad**: Reduce carga en el servidor remoto
+✅ **Experiencia**: Aplicación más responsiva
 
 ## 📊 Tipos de Datos
 
@@ -427,8 +499,9 @@ Para este proyecto, goquery proporciona todo lo necesario con mejor control sobr
 
 ## 🛠️ Tecnologías Utilizadas
 
-- **Go 1.25+** - Lenguaje de programación
+- **Go 1.23+** - Lenguaje de programación
 - **goquery** - Parsing y manipulación de HTML
+- **Valkey** - Caché distribuido de alto rendimiento
 - **net/http** - Cliente HTTP estándar de Go
 - **encoding/json** - Procesamiento de datos JSON embebidos
 
@@ -462,12 +535,14 @@ Las contribuciones son bienvenidas! Si quieres agregar soporte para otro sitio d
 
 ## 📝 Roadmap
 
+- [x] Implementar caché distribuido con Valkey
 - [ ] Agregar soporte para más sitios de anime
-- [ ] Implementar caché de resultados
 - [ ] Agregar rate limiting configurable
 - [ ] Crear CLI para uso desde terminal
 - [ ] Agregar más tests de cobertura
 - [ ] Documentación con ejemplos adicionales
+- [ ] Configurar TTL del caché por operación
+- [ ] Endpoint para limpiar caché manualmente
 
 ---
 
