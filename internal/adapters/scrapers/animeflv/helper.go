@@ -14,52 +14,62 @@ import (
 	"strings"
 )
 
-func getEpisodeInfo(scriptContent string) ([]int, string, error) {
-	episodios, err := GetScriptEpisodeList(scriptContent)
+// episodeInfo extrae información de episodios desde el contenido de un script JavaScript.
+// Combina los resultados de scriptEpisodeList y scriptInfo para obtener
+// tanto la lista de episodios disponibles como la fecha del próximo episodio.
+func episodeInfo(scriptContent string) ([]int, string, error) {
+	episodios, err := scriptEpisodeList(scriptContent)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get episode list: %w", err)
+		return nil, "", fmt.Errorf("error al obtener lista de episodios: %w", err)
 	}
-
-	nextEpisode, err := GetScriptInfo(scriptContent)
+	nextEpisode, err := scriptInfo(scriptContent)
 	if err != nil {
-		return episodios, "", fmt.Errorf("failed to get next episode info: %w", err)
+		return episodios, "", fmt.Errorf("error al obtener información del próximo episodio: %w", err)
 	}
-
 	return episodios, nextEpisode, nil
 }
 
+// parseFloat convierte una cadena a float64 con validación.
+// Retorna error si la cadena está vacía o no tiene un formato numérico válido.
 func parseFloat(value string) (float64, error) {
 	if value == "" {
-		return 0.0, fmt.Errorf("empty string, cannot parse to float")
+		return 0.0, fmt.Errorf("cadena vacía, no se puede convertir a float")
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		return 0.0, fmt.Errorf("invalid float format %q: %w", value, err)
+		return 0.0, fmt.Errorf("formato de float inválido %q: %w", value, err)
 	}
 	return parsed, nil
 }
 
+// extractID extrae el ID del anime desde una URL de AnimeFlv.
+// Ejemplo: "/anime/one-piece-tv" -> "one-piece-tv"
 func extractID(href string) (string, error) {
 	parts := strings.Split(href, "/")
 	if len(parts) < 3 {
-		return "", fmt.Errorf("invalid href format: %s", href)
+		return "", fmt.Errorf("formato de href inválido: %s", href)
 	}
 	return parts[2], nil
 }
 
+// extractEpisodeNumber extrae el número de episodio desde una URL.
+// Ejemplo: "/ver/one-piece-tv-1150" -> 1150
 func extractEpisodeNumber(href string) (int, error) {
 	parts := strings.Split(href, "-")
 	if len(parts) > 1 {
 		episodeStr := parts[len(parts)-1]
 		episodeNum, err := strconv.Atoi(episodeStr)
 		if err != nil {
-			return 0, fmt.Errorf("invalid episode number format %q: %w", episodeStr, err)
+			return 0, fmt.Errorf("formato de número de episodio inválido %q: %w", episodeStr, err)
 		}
 		return episodeNum, nil
 	}
-	return 0, fmt.Errorf("invalid href format for episode extraction: %s", href)
+	return 0, fmt.Errorf("formato de href inválido para extracción de episodio: %s", href)
 }
 
+// removeTrailingNumber elimina el número final de un ID si existe.
+// Ejemplo: "one-piece-tv-1150" -> "one-piece-tv"
+// Útil para normalizar IDs de episodios a IDs de anime.
 func removeTrailingNumber(id string) string {
 	if lastDash := strings.LastIndex(id, "-"); lastDash != -1 {
 		suffix := id[lastDash+1:]
@@ -70,17 +80,28 @@ func removeTrailingNumber(id string) string {
 	return id
 }
 
+// buildURL construye una URL completa agregando parámetros de consulta.
+// Ejemplo: buildURL("https://example.com/search", {"q": "naruto", "page": "1"})
+// retorna "https://example.com/search?q=naruto&page=1"
 func buildURL(baseURL string, params map[string]string) string {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return baseURL
 	}
-
 	query := u.Query()
 	for key, value := range params {
 		query.Add(key, value)
 	}
-
 	u.RawQuery = query.Encode()
 	return u.String()
+}
+
+// parseUint convierte una cadena a uint con validación.
+// Retorna error si la cadena no tiene un formato numérico válido o es un número negativo.
+func parseUint(value string) (uint, error) {
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("formato de uint inválido %q: %w", value, err)
+	}
+	return uint(parsed), nil
 }

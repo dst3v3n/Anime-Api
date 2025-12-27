@@ -8,13 +8,14 @@
 // de reproducción, y listado de contenido reciente.
 package ports
 
-import "github.com/dst3v3n/api-anime/internal/adapters/scrapers/dto"
+import "github.com/dst3v3n/api-anime/internal/domain/dto"
 
 // ScraperPort define el contrato que debe cumplir cualquier scraper de anime
 type ScraperPort interface {
-	SearchAnime(anime string, page string) ([]dto.AnimeResponse, error)
+	SearchAnime(anime string, page string) (dto.AnimeResponse, error)
+	Search() (dto.AnimeResponse, error)
 	AnimeInfo(idAnime string) (dto.AnimeInfoResponse, error)
-	Links(idAnime string, episode int) (dto.LinkResponse, error)
-	RecentAnime() ([]dto.AnimeResponse, error)
+	Links(idAnime string, episode uint) (dto.LinkResponse, error)
+	RecentAnime() ([]dto.AnimeStruct, error)
 	RecentEpisode() ([]dto.EpisodeListResponse, error)
 }

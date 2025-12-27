@@ -6,16 +6,18 @@
 // - Enlaces de reproducción de episodios
 // - Listado de episodios recientes
 // Define todos los selectores CSS necesarios y coordina el proceso de extracción y mapeo de datos.
+
 package animeflv
 
 import (
+	"fmt"
 	"html"
 	"io"
 	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/dst3v3n/api-anime/internal/adapters/scrapers/dto"
+	"github.com/dst3v3n/api-anime/internal/domain/dto"
 )
 
 const (
@@ -42,21 +44,37 @@ const (
 	selectorEpisodeListChapter = "span.Capi"
 )
 
+// Parser es el componente principal de análisis HTML.
+// Contiene un mapper para transformar datos extraídos en DTOs.
 type Parser struct {
 	mapper *Maper
 }
 
+// NewParser crea una nueva instancia del parser HTML.
+// Inicializa el mapper interno para la transformación de datos.
 func NewParser() *Parser {
 	return &Parser{
 		mapper: NewMaper(),
 	}
 }
 
-func (p *Parser) ParseAnime(htmlElement io.Reader) ([]dto.AnimeResponse, error) {
-	results := []dto.AnimeResponse{}
+// ParseAnime extrae información de animes desde HTML.
+// Utilizado tanto para resultados de búsqueda como para animes recientes.
+// Extrae: ID, título, sinopsis, tipo, puntuación e imagen de cada anime.
+func (p *Parser) ParseAnime(htmlElement io.Reader) ([]dto.AnimeStruct, error) {
+	result, err := p.ParseAnimeWithPagination(htmlElement)
+	if err != nil {
+		return result.Animes, fmt.Errorf("error al parsear animes: %w", err)
+	}
+
+	return result.Animes, nil
+}
+
+func (p *Parser) ParseAnimeWithPagination(htmlElement io.Reader) (dto.AnimeResponse, error) {
+	results := dto.AnimeResponse{}
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {
-		return results, err
+		return results, fmt.Errorf("error al crear documento desde HTML: %w", err)
 	}
 
 	doc.Find(selectorSearchArticle).Each(func(_ int, s *goquery.Selection) {
@@ -74,19 +92,35 @@ func (p *Parser) ParseAnime(htmlElement io.Reader) ([]dto.AnimeResponse, error) 
 		if err != nil {
 			return
 		}
-
 		sinopsis, _ := s.Find(selectorArticleSynopsis).Html()
 		sinopsis = html.UnescapeString(sinopsis)
 
-		results = append(results, p.mapper.ToAnime(id, title, sinopsis, tipo, punctuation, image))
+		results.Animes = append(results.Animes, p.mapper.ToAnime(id, title, sinopsis, tipo, punctuation, image))
 	})
+
+	doc.Find("div.NvCnAnm ul.pagination").Each(func(_ int, s *goquery.Selection) {
+		penultimoStr := s.Find("li:nth-last-child(2) a").Text()
+		penultimo, err := parseUint(penultimoStr)
+		results.TotalPages = penultimo
+		if err != nil {
+			return
+		}
+	})
+
 	return results, nil
 }
 
+// ParseAnimeInfo extrae información completa de un anime específico.
+// Procesa tanto el HTML visible como los scripts JavaScript embebidos para obtener:
+// - Información básica (título, sinopsis, tipo, puntuación, imagen)
+// - Géneros del anime
+// - Estado de emisión y fecha del próximo episodio
+// - Lista de episodios disponibles
+// - Animes relacionados (secuelas, precuelas, spin-offs)
 func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.AnimeInfoResponse, error) {
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {
-		return dto.AnimeInfoResponse{}, err
+		return dto.AnimeInfoResponse{}, fmt.Errorf("error al crear documento desde HTML: %w", err)
 	}
 
 	result := &ParseResult{}
@@ -94,7 +128,7 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 	doc.Find("script").Each(func(_ int, s *goquery.Selection) {
 		scriptContent := s.Text()
 		if strings.Contains(scriptContent, "var episodes") {
-			episodes, nextEpisode, err := getEpisodeInfo(scriptContent)
+			episodes, nextEpisode, err := episodeInfo(scriptContent)
 			if err != nil {
 				result.episodes = []int{}
 				result.nextEpisode = ""
@@ -167,10 +201,13 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 	return resultFinal, nil
 }
 
-func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum int) (dto.LinkResponse, error) {
+// ParseLinks extrae los enlaces de reproducción de un episodio.
+// Analiza scripts JavaScript embebidos para obtener URLs de múltiples servidores
+// de video (Zippyshare, Mega, etc.) junto con sus códigos de embed.
+func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum uint) (dto.LinkResponse, error) {
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {
-		return dto.LinkResponse{}, err
+		return dto.LinkResponse{}, fmt.Errorf("error al crear documento desde HTML: %w", err)
 	}
 
 	result := &ParseEpisodeLinksResult{
@@ -181,7 +218,7 @@ func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum in
 	doc.Find("script[type=\"text/javascript\"]").Each(func(_ int, s *goquery.Selection) {
 		scriptContent := s.Text()
 		if strings.Contains(scriptContent, "var videos") {
-			links, err := GetScriptLinksEpisode(scriptContent)
+			links, err := scriptLinksEpisode(scriptContent)
 			if err != nil {
 				return
 			}
@@ -196,10 +233,13 @@ func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum in
 	return p.mapper.ToLinkEpisode(result.ID, result.Title, result.Episode, result.links), nil
 }
 
+// ParseRecentEpisode extrae la lista de episodios recientemente publicados.
+// Obtiene información resumida de cada episodio: ID del anime, título, capítulo,
+// número de episodio e imagen de portada.
 func (p *Parser) ParseRecentEpisode(htmlElement io.Reader) ([]dto.EpisodeListResponse, error) {
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {
-		return []dto.EpisodeListResponse{}, err
+		return []dto.EpisodeListResponse{}, fmt.Errorf("error al crear documento desde HTML: %w", err)
 	}
 	result := []dto.EpisodeListResponse{}
 
