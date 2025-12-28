@@ -6,11 +6,13 @@ package animeflv
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/dst3v3n/api-anime/internal/adapters/cache"
+	"github.com/dst3v3n/api-anime/internal/config"
 	"github.com/dst3v3n/api-anime/internal/domain/dto"
-	"github.com/dst3v3n/api-anime/test/unit/animeflv/mocks"
+	"github.com/dst3v3n/api-anime/internal/mocks"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -56,7 +58,13 @@ func TestCacheSet(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{"127.0.0.1:6379"}})
+			cfg, err := config.GetConfig()
+			if err != nil {
+				t.Fatalf("error getting config: %v", err)
+			}
+			initAddress := fmt.Sprintf("redis://%s:%d/%d", cfg.CacheHost, cfg.CachePort, cfg.CacheDB)
+
+			client, err := valkey.NewClient(valkey.MustParseURL(initAddress))
 			if err != nil {
 				t.Fatalf("error initializing Valkey client: %v", err)
 			}
@@ -109,7 +117,14 @@ func TestCacheGet(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{"127.0.0.1:6379"}})
+			cfg, err := config.GetConfig()
+			if err != nil {
+				t.Fatalf("error getting config: %v", err)
+			}
+
+			initAddress := fmt.Sprintf("redis://%s:%d/%d", cfg.CacheHost, cfg.CachePort, cfg.CacheDB)
+
+			client, err := valkey.NewClient(valkey.MustParseURL(initAddress))
 			if err != nil {
 				t.Fatalf("error initializing Valkey client: %v", err)
 			}

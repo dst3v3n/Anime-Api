@@ -7,11 +7,14 @@ package animeflv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dst3v3n/api-anime/internal/adapters/cache"
 	"github.com/dst3v3n/api-anime/internal/adapters/scrapers/animeflv"
+	"github.com/dst3v3n/api-anime/internal/config"
 	"github.com/dst3v3n/api-anime/internal/domain/dto"
 	"github.com/dst3v3n/api-anime/internal/ports"
+	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -21,6 +24,7 @@ import (
 // Integra caché distribuido (Valkey) en todos los sub-servicios para optimizar rendimiento.
 type AnimeflvService struct {
 	scraper ports.ScraperPort
+	logger  zerolog.Logger
 	search  searchService
 	recent  recentService
 	detail  detailService
@@ -31,12 +35,24 @@ type AnimeflvService struct {
 // y todos los sub-servicios necesarios para las operaciones.
 func NewAnimeflvService() *AnimeflvService {
 	scraper := animeflv.NewClient()
-	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{"127.0.0.1:6379"}})
+
+	logger := config.NewConfig().Logging()
+	config, err := config.GetConfig()
 	if err != nil {
+		logger.Error().Err(err).Msg("Error al obtener la configuración de Valkey")
+		return nil
+	}
+
+	initAddress := fmt.Sprintf("redis://%s:%d/%d", config.CacheHost, config.CachePort, config.CacheDB)
+
+	client, err := valkey.NewClient(valkey.MustParseURL(initAddress))
+	if err != nil {
+		logger.Error().Err(err).Msg("Error al conectar con Valkey")
 		panic(err)
 	}
 	return &AnimeflvService{
 		scraper: scraper,
+		logger:  logger,
 		search: searchService{
 			scraper: scraper,
 			cache:   cache.NewValkeyCache(client),

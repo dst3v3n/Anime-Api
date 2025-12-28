@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/dst3v3n/api-anime/internal/config"
 	"github.com/dst3v3n/api-anime/internal/ports"
 	"github.com/valkey-io/valkey-go"
 )
@@ -18,13 +19,19 @@ import (
 // Encapsula un cliente Valkey para acceso al servidor de caché distribuido.
 type Valkey struct {
 	client valkey.Client
+	config *config.Config
 }
 
 // NewValkeyCache crea una nueva instancia del adaptador de caché Valkey.
 // Toma un cliente Valkey ya inicializado y retorna una instancia que implementa CachePort.
 func NewValkeyCache(client valkey.Client) ports.CachePort {
+	enviroment, err := config.GetConfig()
+	if err != nil {
+		return nil
+	}
 	return &Valkey{
 		client: client,
+		config: enviroment,
 	}
 }
 
@@ -32,7 +39,8 @@ func NewValkeyCache(client valkey.Client) ports.CachePort {
 // Utiliza un tiempo de caché de 1 minuto. Si la clave no existe, retorna nil sin error.
 // Si el valor existe pero no puede ser deserializado, retorna un error.
 func (v *Valkey) Get(ctx context.Context, key string, dest interface{}) error {
-	resp, error := v.client.DoCache(ctx, v.client.B().Get().Key(key).Cache(), time.Minute).ToString()
+	ttl := v.config.CacheTTL
+	resp, error := v.client.DoCache(ctx, v.client.B().Get().Key(key).Cache(), time.Duration(ttl)*time.Minute).ToString()
 
 	if error != nil {
 		if valkey.IsValkeyNil(error) {
@@ -63,7 +71,7 @@ func (v *Valkey) Set(ctx context.Context, key string, value interface{}) error {
 		return fmt.Errorf("Error: valor no es serializable a JSON")
 	}
 
-	cmd := v.client.B().Set().Key(key).Value(string(data)).Ex(time.Hour).Build()
+	cmd := v.client.B().Set().Key(key).Value(string(data)).Ex(time.Minute).Build()
 	return v.client.Do(ctx, cmd).Error()
 }
 
