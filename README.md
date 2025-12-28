@@ -38,9 +38,11 @@ go get github.com/dst3v3n/api-anime
 ### Dependencias
 
 ```
-github.com/PuerkitoBio/goquery v1.10.3   # Parser HTML
+github.com/PuerkitoBio/goquery v1.11.0   # Parser HTML
+github.com/joho/godotenv v1.5.1          # Cargar variables .env
+github.com/rs/zerolog v1.34.0            # Logging estructurado
 github.com/valkey-io/valkey-go v1.0.69   # Caché distribuido
-golang.org/x/net v0.46.0                 # Utilidades de red
+golang.org/x/net v0.48.0                 # Utilidades de red
 golang.org/x/time v0.14.0                # Rate limiting
 ```
 
@@ -56,7 +58,19 @@ docker run -d -p 6379:6379 valkey/valkey:latest
 brew install valkey && brew services start valkey
 ```
 
-### 2. Usar la API
+### 2. Configurar Variables de Entorno
+
+```bash
+# Copiar plantilla de ejemplo
+cp .env.example .env
+
+# Editar .env con tus valores (opcional, usa defaults si no editas)
+# CACHE_HOST=localhost
+# CACHE_PORT=6379
+# LOG_ENV=development
+```
+
+### 3. Usar la API
 
 ```go
 package main
@@ -70,7 +84,7 @@ import (
 )
 
 func main() {
-    // Crear servicio (se conecta automáticamente a Valkey)
+    // Crear servicio (carga .env automáticamente, conecta a Valkey)
     service := anime.NewAnimeFlv()
     
     // Contexto con timeout
@@ -78,6 +92,7 @@ func main() {
     defer cancel()
     
     // 1. Buscar anime
+
     resultados, err := service.SearchAnime(ctx, "One Piece", 1)
     if err != nil {
         panic(err)
@@ -442,13 +457,75 @@ No actualmente, pero es trivial con la arquitectura.
 
 ## 🔧 Configuración
 
-Actualmente usa valores por defecto. Soporte para variables de entorno en próxima versión:
+La librería se configura mediante variables de entorno desde un archivo `.env`. Se proporciona `.env.example` como plantilla.
+
+### Variables de Entorno Disponibles
 
 ```bash
-VALKEY_HOST=localhost
-VALKEY_PORT=6379
-VALKEY_PASSWORD=
+# Aplicación
+APP_NAME=anime-api                    # string: Nombre de la aplicación
+
+# Valkey (Caché Distribuido)
+CACHE_HOST=localhost                  # string: Host del servidor Valkey
+CACHE_PORT=6379                       # int: Puerto de Valkey (1-65535)
+CACHE_USERNAME=                       # string: Usuario para autenticación (opcional)
+CACHE_PASSWORD=                       # string: Contraseña para autenticación (opcional)
+CACHE_DB=0                            # int: Número de base de datos Valkey (0-15)
+CACHE_TTL_MINUTE=15                   # int: TTL en minutos para caché (default: 15)
+
+# Logging
+LOG_APP_NAME=anime-api                # string: Nombre para los logs
+LOG_ENV=development                   # string: Entorno (development|staging|production)
 ```
+
+### Valores por Defecto
+
+Si una variable no está definida, se usan estos valores:
+
+| Variable | Tipo | Default | Rango/Validación |
+|----------|------|---------|------------------|
+| `APP_NAME` | string | "" | Requerido (no vacío) |
+| `CACHE_HOST` | string | localhost | Cualquier host válido |
+| `CACHE_PORT` | int | 6379 | 1-65535 |
+| `CACHE_USERNAME` | string | "" | Opcional |
+| `CACHE_PASSWORD` | string | "" | Opcional |
+| `CACHE_DB` | int | 0 | 0-15 |
+| `CACHE_TTL_MINUTE` | int | 15 | ≥ 0 |
+| `LOG_APP_NAME` | string | MyApp | Cualquier valor |
+| `LOG_ENV` | string | development | development, staging, production |
+
+### Cómo Configurar
+
+1. **Copiar plantilla de ejemplo**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Editar `.env` con tus valores**:
+   ```bash
+   APP_NAME=mi-anime-scraper
+   CACHE_HOST=redis.example.com
+   CACHE_PORT=6380
+   CACHE_PASSWORD=mi-contraseña
+   CACHE_TTL_MINUTE=30
+   LOG_ENV=production
+   ```
+
+3. **La librería cargará automáticamente** al inicializar:
+   ```go
+   service := anime.NewAnimeFlv() // Lee .env automáticamente
+   ```
+
+### Validación de Configuración
+
+La librería valida automáticamente la configuración al iniciar:
+
+- ✅ `APP_NAME` no puede estar vacío
+- ✅ `CACHE_PORT` debe estar entre 1-65535
+- ✅ `CACHE_TTL_MINUTE` debe ser ≥ 0
+- ✅ `LOG_ENV` debe ser: development, staging o production
+
+Si alguna validación falla, la aplicación retorna un error descriptivo.
 
 ## 📊 Especificaciones
 
@@ -546,16 +623,26 @@ El proyecto utiliza las siguientes dependencias:
 
 ### Configuración Inicial
 
-Asegúrate de tener Valkey ejecutándose:
+1. **Asegúrate de tener Valkey ejecutándose:**
 
-```bash
-# Usando Docker (recomendado)
-docker run -d -p 6379:6379 valkey/valkey:latest
+   ```bash
+   # Usando Docker (recomendado)
+   docker run -d -p 6379:6379 valkey/valkey:latest
 
-# O instala Valkey localmente
-# Ubuntu/Debian: sudo apt-get install valkey
-# macOS: brew install valkey
-```
+   # O instala Valkey localmente
+   # Ubuntu/Debian: sudo apt-get install valkey
+   # macOS: brew install valkey
+   ```
+
+2. **Configura las variables de entorno:**
+
+   ```bash
+   # Copiar plantilla
+   cp .env.example .env
+   
+   # Editar si es necesario (usa valores por defecto si no editas)
+   # Por defecto conecta a localhost:6379 en modo development
+   ```
 
 ### Inicio rápido
 
@@ -563,18 +650,22 @@ docker run -d -p 6379:6379 valkey/valkey:latest
 package main
 
 import (
+    "context"
     "fmt"
-    "github.com/dst3v3n/api-anime/internal/domain/services/animeflv"
+    "time"
+    "github.com/dst3v3n/api-anime"
 )
 
 func main() {
-    // Crear servicio con caché integrado (se conecta automáticamente a Valkey)
-    service := animeflv.NewAnimeflvService()
+    // Crear servicio con caché integrado (carga .env automáticamente)
+    service := anime.NewAnimeFlv()
+    
+    // Usar con contexto
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
     // 1. Buscar anime por nombre
-    anime := "One Piece"
-    page := uint(1)
-    resultados, err := service.SearchAnime(&anime, &page)
+    resultados, err := service.SearchAnime(ctx, "One Piece", 1)
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -591,8 +682,7 @@ func main() {
     }
 
     // 2. Obtener información detallada (con caché)
-    idAnime := "one-piece-tv"
-    info, err := service.AnimeInfo(&idAnime)
+    info, err := service.AnimeInfo(ctx, "one-piece-tv")
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -610,8 +700,7 @@ func main() {
     }
     
     // 3. Obtener enlaces de un episodio específico (con caché)
-    episode := uint(1150)
-    links, err := service.Links(&idAnime, &episode)
+    links, err := service.Links(ctx, "one-piece-tv", 1150)
     if err != nil {
         fmt.Println("Error:", err)
         return
@@ -680,12 +769,10 @@ type AnimeResponse struct {
 **Ejemplo:**
 
 ```go
-anime := "Naruto"
-page := uint(1)
-resultados, err := service.SearchAnime(&anime, &page)
+resultados, err := service.SearchAnime(ctx, "Naruto", 1)
 ```
 
-> **Nota:** Los resultados se cachean automáticamente en Valkey (1 hora de TTL). Búsquedas posteriores dentro de 1 minuto de lectura caché retornarán datos del caché instantáneamente.
+> **Nota:** Los resultados se cachean automáticamente en Valkey con TTL de 15 minutos. Búsquedas posteriores dentro de ese tiempo retornarán datos del caché instantáneamente (< 1ms).
 
 ---
 
@@ -694,12 +781,13 @@ resultados, err := service.SearchAnime(&anime, &page)
 Obtiene información detallada de un anime específico. **Incluye caché automático de 15 minutos**.
 
 ```go
-AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, error)
+AnimeInfo(ctx context.Context, idAnime string) (dto.AnimeInfoResponse, error)
 ```
 
 **Parámetros:**
 
-- `idAnime` (*string): ID del anime (obtenido de SearchAnime)
+- `ctx context.Context`: Contexto con timeout
+- `idAnime string`: ID del anime (obtenido de SearchAnime)
 
 **Retorna:**
 
@@ -723,11 +811,10 @@ type AnimeRelated struct {
 **Ejemplo:**
 
 ```go
-id := "naruto-shippuden"
-info, err := service.AnimeInfo(&id)
+info, err := service.AnimeInfo(ctx, "naruto-shippuden")
 ```
 
-> **Nota:** Los detalles se cachean automáticamente por 1 hora bajo la clave `anime-info-{id}`, con lectura en caché de 1 minuto.
+> **Nota:** Los detalles se cachean automáticamente por 15 minutos bajo la clave `anime-info-{id}`, con lectura en caché < 1ms.
 
 ---
 
@@ -764,12 +851,10 @@ type LinkSource struct {
 **Ejemplo:**
 
 ```go
-id := "naruto-shippuden"
-episode := uint(1)
-links, err := service.Links(&id, &episode)
+links, err := service.Links(ctx, "naruto-shippuden", 1)
 ```
 
-> **Nota:** Los enlaces se cachean automáticamente por 1 hora bajo la clave `links-{id}-{episode}`, con lectura en caché de 1 minuto.
+> **Nota:** Los enlaces se cachean automáticamente por 15 minutos bajo la clave `links-{id}-{episode}`, con lectura en caché < 1ms.
 
 ---
 
@@ -778,7 +863,7 @@ links, err := service.Links(&id, &episode)
 Obtiene la lista de animes recientemente agregados al sitio. **Incluye caché automático de 15 minutos**.
 
 ```go
-RecentAnime() ([]dto.AnimeStruct, error)
+RecentAnime(ctx context.Context) ([]dto.AnimeStruct, error)
 ```
 
 **Retorna:**
@@ -787,7 +872,7 @@ Lista de `AnimeStruct` con los animes recientes.
 **Ejemplo:**
 
 ```go
-recientes, err := service.RecentAnime()
+recientes, err := service.RecentAnime(ctx)
 for _, anime := range recientes {
     fmt.Printf("%s - %s\n", anime.Title, anime.Type)
 }
@@ -802,7 +887,7 @@ for _, anime := range recientes {
 Obtiene la lista de episodios recientemente publicados. **Incluye caché automático de 15 minutos**.
 
 ```go
-RecentEpisode() ([]dto.EpisodeListResponse, error)
+RecentEpisode(ctx context.Context) ([]dto.EpisodeListResponse, error)
 ```
 
 **Retorna:**
@@ -820,23 +905,24 @@ type EpisodeListResponse struct {
 **Ejemplo:**
 
 ```go
-episodios, err := service.RecentEpisode()
+episodios, err := service.RecentEpisode(ctx)
 for _, ep := range episodios {
     fmt.Printf("%s - Episodio %d\n", ep.Title, ep.Episode)
 }
 ```
 
-> **Nota:** Los episodios recientes se cachean bajo la clave `recent-episode` por 1 hora, con lectura en caché de 1 minuto.
+> **Nota:** Los episodios recientes se cachean bajo la clave `recent-episode` por 15 minutos, con lectura en caché < 1ms.
 
 ## 💡 Casos de Uso
 
 ### Buscar y listar animes
 
 ```go
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
 // Buscar "Attack on Titan" en la primera página (con caché)
-title := "Attack on Titan"
-page := uint(1)
-resultados, _ := service.SearchAnime(&title, &page)
+resultados, _ := service.SearchAnime(ctx, "Attack on Titan", 1)
 for _, anime := range resultados.Animes {
     fmt.Printf("%s (%s) - ⭐%.1f\n", anime.Title, anime.Type, anime.Punctuation)
 }
@@ -846,15 +932,16 @@ for _, anime := range resultados.Animes {
 ### Obtener todos los episodios de un anime
 
 ```go
-id := "shingeki-no-kyojin"
-info, _ := service.AnimeInfo(&id)
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+info, _ := service.AnimeInfo(ctx, "shingeki-no-kyojin")
 fmt.Printf("Estado: %s\n", info.Status)
 fmt.Printf("Total de episodios: %d\n", len(info.Episodes))
 
 // Obtener enlaces de todos los episodios (con caché)
 for _, ep := range info.Episodes {
-    episode := uint(ep)
-    links, _ := service.Links(&id, &episode)
+    links, _ := service.Links(ctx, "shingeki-no-kyojin", uint(ep))
     fmt.Printf("Episodio %d tiene %d enlaces\n", ep, len(links.Link))
 }
 ```
@@ -862,8 +949,10 @@ for _, ep := range info.Episodes {
 ### Verificar nuevos episodios
 
 ```go
-id := "one-piece-tv"
-info, _ := service.AnimeInfo(&id)
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+info, _ := service.AnimeInfo(ctx, "one-piece-tv")
 if info.Status == "En Emision" {
     fmt.Println("Próximo episodio:", info.NextEpisode)
     ultimoEp := info.Episodes[len(info.Episodes)-1]
@@ -874,15 +963,18 @@ if info.Status == "En Emision" {
 ### Monitorear animes y episodios recientes
 
 ```go
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
 // Ver qué animes nuevos se agregaron (con caché)
-recientes, _ := service.RecentAnime()
+recientes, _ := service.RecentAnime(ctx)
 fmt.Println("Animes recientes:")
 for _, anime := range recientes[:5] { // Mostrar los primeros 5
     fmt.Printf("- %s (⭐%.1f)\n", anime.Title, anime.Punctuation)
 }
 
 // Ver qué episodios nuevos salieron hoy (con caché)
-episodios, _ := service.RecentEpisode()
+episodios, _ := service.RecentEpisode(ctx)
 fmt.Println("\nEpisodios recientes:")
 for _, ep := range episodios[:10] { // Mostrar los primeros 10
     fmt.Printf("- %s - Ep. %d\n", ep.Title, ep.Episode)
@@ -906,9 +998,10 @@ for _, related := range info.AnimeRelated {
 Todos los métodos retornan un error que debes manejar:
 
 ```go
-anime := "Naruto"
-page := uint(1)
-resultados, err := service.SearchAnime(&anime, &page)
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+resultados, err := service.SearchAnime(ctx, "Naruto", 1)
 if err != nil {
     log.Fatal("Error en la búsqueda:", err)
 }
@@ -1085,12 +1178,11 @@ go test ./test/unit/animeflv -run TestSearchAnime
 ```go
 func TestSearchAnimeService(t *testing.T) {
     // Arrange
-    service := animeflv.NewAnimeflvService()
-    anime := "Naruto"
-    page := uint(1)
+    service := anime.NewAnimeFlv()
+    ctx := context.Background()
     
     // Act
-    result, err := service.SearchAnime(&anime, &page)
+    result, err := service.SearchAnime(ctx, "Naruto", 1)
     
     // Assert
     if err != nil {
@@ -1177,24 +1269,36 @@ Red:
 ## 🔄 Flujo de Uso Típico
 
 ```go
-// 1. Inicializar (conecta a Valkey automáticamente)
-service := animeflv.NewAnimeflvService()
+package main
 
-// 2. Búsqueda (1.5-2.5 segundos en primera búsqueda)
-anime := "Naruto"
-page := uint(1)
-results, _ := service.SearchAnime(&anime, &page)
+import (
+    "context"
+    "fmt"
+    "time"
+    "github.com/dst3v3n/api-anime"
+)
 
-// 3. Obtener detalles (1-2 segundos en primer acceso)
-id := results.Animes[0].ID
-info, _ := service.AnimeInfo(&id)
+func main() {
+    // 1. Inicializar (carga .env automáticamente y conecta a Valkey)
+    service := anime.NewAnimeFlv()
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-// 4. Obtener enlaces de episodios (1-2 segundos)
-episode := uint(1)
-links, _ := service.Links(&id, &episode)
+    // 2. Búsqueda (1.5-2.5 segundos en primera búsqueda)
+    results, _ := service.SearchAnime(ctx, "Naruto", 1)
 
-// 5. Búsqueda repetida (< 1ms - desde caché!)
-results2, _ := service.SearchAnime(&anime, &page)
+    // 3. Obtener detalles (1-2 segundos en primer acceso)
+    id := results.Animes[0].ID
+    info, _ := service.AnimeInfo(ctx, id)
+
+    // 4. Obtener enlaces de episodios (1-2 segundos)
+    links, _ := service.Links(ctx, id, 1)
+    fmt.Printf("Servidores: %d\n", len(links.Link))
+
+    // 5. Búsqueda repetida (< 1ms - desde caché!)
+    results2, _ := service.SearchAnime(ctx, "Naruto", 1)
+    fmt.Printf("Desde caché: %d animes\n", len(results2.Animes))
+}
 ```
 
 ## 🐛 Troubleshooting
@@ -1241,7 +1345,45 @@ El caché tiene TTL de 15 minutos. Espera o reinicia la conexión a Valkey.
 
 ## 🔧 Configuración Avanzada
 
+### Variables de Entorno para Diferentes Entornos
+
+La librería carga automáticamente la configuración desde `.env`. Usa diferentes archivos para cada entorno:
+
+**Desarrollo** (`.env`):
+```bash
+APP_NAME=anime-scraper-dev
+CACHE_HOST=localhost
+CACHE_PORT=6379
+CACHE_DB=0
+CACHE_TTL_MINUTE=15
+LOG_ENV=development
+```
+
+**Producción** (`.env.production`):
+```bash
+APP_NAME=anime-scraper-prod
+CACHE_HOST=redis-prod.example.com
+CACHE_PORT=6380
+CACHE_USERNAME=admin
+CACHE_PASSWORD=${REDIS_PASSWORD}
+CACHE_DB=1
+CACHE_TTL_MINUTE=60
+LOG_ENV=production
+```
+
+**Testing** (`.env.test`):
+```bash
+APP_NAME=anime-scraper-test
+CACHE_HOST=localhost
+CACHE_PORT=6379
+CACHE_DB=15
+CACHE_TTL_MINUTE=1
+LOG_ENV=development
+```
+
 ### Conexión a Valkey Personalizada
+
+Para configuración manual (sin usar `.env`), puedes inicializar el cliente Valkey directamente:
 
 ```go
 package main
@@ -1249,16 +1391,13 @@ package main
 import (
     "github.com/valkey-io/valkey-go"
     "github.com/dst3v3n/api-anime/internal/adapters/cache"
-    "github.com/dst3v3n/api-anime/internal/adapters/scrapers/animeflv"
-    "github.com/dst3v3n/api-anime/internal/domain/services/animeflv"
 )
 
 func main() {
     // Conectar a Valkey con configuración personalizada
-    client, err := valkey.NewClient(valkey.ClientOption{
-        InitAddress: []string{"localhost:6379"},
-        // Opciones adicionales: password, etc.
-    })
+    client, err := valkey.NewClient(valkey.MustParseURL(
+        "redis://admin:password@redis-prod.example.com:6380/1",
+    ))
     if err != nil {
         panic(err)
     }
@@ -1266,14 +1405,10 @@ func main() {
 
     // Crear caché con cliente personalizado
     cacheAdapter := cache.NewValkeyCache(client)
+    // Ahora el caché usará la configuración desde .env
     
-    // Pasar al scraper
-    scraperAdapter := animeflv.NewAnimeflvScraper(cacheAdapter)
-    
-    // Usar en servicio
-    service := animeflv.NewAnimeflvServiceWithDependencies(scraperAdapter)
-    
-    // Usar servicio...
+    // Usar la API pública normalmente
+    service := anime.NewAnimeFlv()
 }
 ```
 
@@ -1299,24 +1434,77 @@ client: &http.Client{
 }
 ```
 
-## 📋 Variables de Entorno
+## 📋 Variables de Entorno (Referencia Completa)
 
-Actualmente el proyecto usa valores por defecto. Futuras versiones soportarán:
+El proyecto usa **configuración centralizada** mediante variables de entorno con carga automática desde `.env`:
+
+### Archivo `.env.example`
 
 ```bash
-VALKEY_HOST=localhost
-VALKEY_PORT=6379
-VALKEY_PASSWORD=
+# Configuración de la Aplicación
+APP_NAME=string
+
+# Configuración de Valkey (Caché Distribuido)
+CACHE_HOST=string              # Host o IP del servidor Valkey
+CACHE_PORT=int                 # Puerto (ej: 6379)
+CACHE_USERNAME=string          # Usuario (opcional)
+CACHE_PASSWORD=string          # Contraseña (opcional)
+CACHE_DB=int                   # Número de DB (0-15)
+CACHE_TTL_MINUTE=int           # TTL en minutos (default: 15)
+
+# Configuración de Logging
+LOG_APP_NAME=string            # Nombre de la app en logs
+LOG_ENV=string                 # development|staging|production
+```
+
+### Ejemplo Completo de `.env`
+
+```bash
+# Para desarrollo local
+APP_NAME=anime-scraper-dev
+CACHE_HOST=localhost
+CACHE_PORT=6379
+CACHE_USERNAME=
+CACHE_PASSWORD=
+CACHE_DB=0
+CACHE_TTL_MINUTE=15
+LOG_APP_NAME=anime-api
+LOG_ENV=development
+```
+
+```bash
+# Para producción
+APP_NAME=anime-scraper-prod
+CACHE_HOST=redis.production.example.com
+CACHE_PORT=6379
+CACHE_USERNAME=admin
+CACHE_PASSWORD=super-secret-password
+CACHE_DB=1
+CACHE_TTL_MINUTE=30
+LOG_APP_NAME=anime-api
+LOG_ENV=production
+```
+
+### Ubicación del Archivo `.env`
+
+La librería busca el archivo `.env` en este orden:
+
+1. En la raíz del proyecto (donde está `go.mod`)
+2. En directorios padres: `../.env`, `../../.env`, `../../../.env`
+
+Si no encuentra el archivo, usa los valores por defecto automáticamente.
 
 ## 🛠️ Tecnologías Utilizadas
 
 | Tecnología | Versión | Propósito |
 |-----------|---------|----------|
 | **Go** | 1.25.3 | Lenguaje principal |
-| **goquery** | v1.10.3 | Parsing y manipulación de HTML/CSS |
+| **goquery** | v1.11.0 | Parsing y manipulación de HTML/CSS |
+| **godotenv** | v1.5.1 | Cargar variables de entorno desde .env |
+| **zerolog** | v1.34.0 | Logging estructurado y configurado por entorno |
 | **Valkey** | v1.0.69 | Caché distribuido de alto rendimiento |
 | **cascadia** | v1.3.3 | Selectores CSS (usado por goquery) |
-| **golang.org/x/net** | v0.46.0 | Utilidades de red avanzadas |
+| **golang.org/x/net** | v0.48.0 | Utilidades de red avanzadas |
 | **golang.org/x/time** | v0.14.0 | Rate limiting integrado (3 req/seg con burst de 5) |
 
 ## 📚 Referencias y Recursos
