@@ -56,7 +56,7 @@ func (c *Config) getEnvieroment() (*Config, error) {
 	}
 
 	cfg := &Config{
-		AppName: getEnv("APP_NAME", ""),
+		AppName: getEnv("APP_NAME", "Anime-API"),
 
 		CacheConfig: CacheConfig{
 			CacheHost:     getEnv("CACHE_HOST", "localhost"),
