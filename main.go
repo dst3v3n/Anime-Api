@@ -5,16 +5,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"time"
 
 	animeflvService "github.com/dst3v3n/api-anime/internal/domain/services/animeflv"
 )
 
 func main() {
-	// Inicializar el servicio
+	// Inicializar el servicio (sin context)
 	service := animeflvService.NewAnimeflvService()
 
 	// Menú de opciones
@@ -59,18 +62,38 @@ func printMenu() {
 	fmt.Println("  recent-episodes  - Episodios recientemente publicados")
 	fmt.Println("  all              - Ejecutar todas las pruebas")
 	fmt.Println("\nEjemplo: go run main.go search")
+	fmt.Println("\nNota: Presiona Ctrl+C para cancelar en cualquier momento")
+}
+
+// createContext crea un contexto con timeout y cancelación por señal
+func createContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	// Crear contexto base con timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	// Agregar cancelación por señal (Ctrl+C)
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+
+	// Retornar función que cancela ambos
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // testSearchAnime prueba la búsqueda de anime con paginación
 func testSearchAnime(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: SearchAnime ===")
 
-	anime := "One Piece"
-	page := uint(1)
+	// Crear contexto para esta operación (30 segundos de timeout)
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
+	anime := "Dragon Ball"
+	page := uint(2)
 
 	fmt.Printf("Buscando: '%s' (Página %d)\n\n", anime, page)
 
-	resultado, err := service.SearchAnime(&anime, &page)
+	resultado, err := service.SearchAnime(ctx, anime, page)
 	if err != nil {
 		log.Printf("Error en SearchAnime: %v\n", err)
 		return
@@ -95,7 +118,11 @@ func testSearchAnime(service *animeflvService.AnimeflvService) {
 func testSearch(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: Search (Todos los animes) ===\n")
 
-	resultado, err := service.Search()
+	// Crear contexto para esta operación
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
+	resultado, err := service.Search(ctx)
 	if err != nil {
 		log.Printf("Error en Search: %v\n", err)
 		return
@@ -129,10 +156,14 @@ func testSearch(service *animeflvService.AnimeflvService) {
 func testAnimeInfo(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: AnimeInfo ===")
 
+	// Crear contexto para esta operación
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
 	idAnime := "one-piece-tv"
 	fmt.Printf("Obteniendo información de: %s\n\n", idAnime)
 
-	resultadoInfo, err := service.AnimeInfo(&idAnime)
+	resultadoInfo, err := service.AnimeInfo(ctx, idAnime)
 	if err != nil {
 		log.Printf("Error en AnimeInfo: %v\n", err)
 		return
@@ -171,11 +202,15 @@ func testAnimeInfo(service *animeflvService.AnimeflvService) {
 func testLinks(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: Links ===")
 
+	// Crear contexto para esta operación
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
 	idAnime := "one-piece-tv"
 	episode := uint(1146)
 	fmt.Printf("Obteniendo enlaces de: %s - Episodio %d\n\n", idAnime, episode)
 
-	resultadoLinks, err := service.Links(&idAnime, &episode)
+	resultadoLinks, err := service.Links(ctx, idAnime, episode)
 	if err != nil {
 		log.Printf("Error en Links: %v\n", err)
 		return
@@ -197,7 +232,11 @@ func testLinks(service *animeflvService.AnimeflvService) {
 func testRecentAnime(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: RecentAnime ===\n")
 
-	resultadoRecents, err := service.RecentAnime()
+	// Crear contexto para esta operación
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
+	resultadoRecents, err := service.RecentAnime(ctx)
 	if err != nil {
 		log.Printf("Error en RecentAnime: %v\n", err)
 		return
@@ -221,7 +260,11 @@ func testRecentAnime(service *animeflvService.AnimeflvService) {
 func testRecentEpisode(service *animeflvService.AnimeflvService) {
 	fmt.Println("\n=== TEST: RecentEpisode ===\n")
 
-	resultadoEpisodes, err := service.RecentEpisode()
+	// Crear contexto para esta operación
+	ctx, cancel := createContext(30 * time.Second)
+	defer cancel()
+
+	resultadoEpisodes, err := service.RecentEpisode(ctx)
 	if err != nil {
 		log.Printf("Error en RecentEpisode: %v\n", err)
 		return

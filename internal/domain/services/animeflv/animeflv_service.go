@@ -6,6 +6,8 @@
 package animeflv
 
 import (
+	"context"
+
 	"github.com/dst3v3n/api-anime/internal/adapters/cache"
 	"github.com/dst3v3n/api-anime/internal/adapters/scrapers/animeflv"
 	"github.com/dst3v3n/api-anime/internal/domain/dto"
@@ -52,36 +54,36 @@ func NewAnimeflvService() *AnimeflvService {
 
 // Search busca animes por nombre con paginación.
 // Delega la operación al servicio de búsqueda especializado.
-func (afs *AnimeflvService) SearchAnime(anime *string, page *uint) (dto.AnimeResponse, error) {
-	return afs.search.SearchAnime(anime, page)
+func (afs *AnimeflvService) SearchAnime(ctx context.Context, anime string, page uint) (dto.AnimeResponse, error) {
+	return afs.search.SearchAnime(ctx, anime, page)
 }
 
 // Search obtiene todos los animes disponibles sin filtros de búsqueda.
 // Delega la operación al servicio de búsqueda especializado con caché integrado.
-func (afs *AnimeflvService) Search() (dto.AnimeResponse, error) {
-	return afs.search.Search()
+func (afs *AnimeflvService) Search(ctx context.Context) (dto.AnimeResponse, error) {
+	return afs.search.Search(ctx)
 }
 
 // AnimeInfo obtiene información detallada de un anime específico por su ID.
 // Delega la operación al servicio de detalles.
-func (afs *AnimeflvService) AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, error) {
-	return afs.detail.AnimeInfo(idAnime)
+func (afs *AnimeflvService) AnimeInfo(ctx context.Context, idAnime string) (dto.AnimeInfoResponse, error) {
+	return afs.detail.AnimeInfo(ctx, idAnime)
 }
 
 // Links obtiene los enlaces de reproducción para un episodio específico.
 // Delega la operación al servicio de detalles.
-func (afs *AnimeflvService) Links(idAnime *string, episode *uint) (dto.LinkResponse, error) {
-	return afs.detail.Links(idAnime, episode)
+func (afs *AnimeflvService) Links(ctx context.Context, idAnime string, episode uint) (dto.LinkResponse, error) {
+	return afs.detail.Links(ctx, idAnime, episode)
 }
 
 // RecentAnime obtiene la lista de animes recientemente agregados.
 // Delega la operación al servicio de contenido reciente.
-func (afs *AnimeflvService) RecentAnime() ([]dto.AnimeStruct, error) {
-	return afs.recent.RecentAnime()
+func (afs *AnimeflvService) RecentAnime(ctx context.Context) ([]dto.AnimeStruct, error) {
+	return afs.recent.RecentAnime(ctx)
 }
 
 // RecentEpisode obtiene la lista de episodios recientemente publicados.
 // Delega la operación al servicio de contenido reciente.
-func (afs *AnimeflvService) RecentEpisode() ([]dto.EpisodeListResponse, error) {
-	return afs.recent.RecentEpisode()
+func (afs *AnimeflvService) RecentEpisode(ctx context.Context) ([]dto.EpisodeListResponse, error) {
+	return afs.recent.RecentEpisode(ctx)
 }

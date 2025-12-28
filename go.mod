@@ -8,4 +8,5 @@ require (
 	github.com/valkey-io/valkey-go v1.0.69 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 )

@@ -25,20 +25,19 @@ type searchService struct {
 // SearchAnime realiza una búsqueda de animes con validaciones, transformaciones y caché.
 // Valida que el nombre no esté vacío, normaliza el texto a minúsculas, maneja
 // la paginación por defecto, intenta recuperar del caché y consulta al scraper si es necesario.
-func (search *searchService) SearchAnime(anime *string, page *uint) (dto.AnimeResponse, error) {
-	if *anime == "" {
+func (search *searchService) SearchAnime(ctx context.Context, anime string, page uint) (dto.AnimeResponse, error) {
+	if anime == "" {
 		return dto.AnimeResponse{}, fmt.Errorf("el nombre del anime no puede estar vacío")
 	}
-	*anime = strings.ToLower(*anime)
-	*anime = strings.ReplaceAll(*anime, " ", "-")
+	anime = strings.ToLower(anime)
+	anime = strings.ReplaceAll(anime, " ", "-")
 
-	if *page == 0 {
-		*page = 1
+	if page == 0 {
+		page = 1
 	}
-	pageStr := fmt.Sprintf("%d", *page)
+	pageStr := fmt.Sprintf("%d", page)
 
-	cacheKey := fmt.Sprintf("search-anime-%s-page-%d", *anime, *page)
-	ctx := context.Background()
+	cacheKey := fmt.Sprintf("search-anime-%s-page-%d", anime, page)
 
 	var result dto.AnimeResponse
 
@@ -48,7 +47,7 @@ func (search *searchService) SearchAnime(anime *string, page *uint) (dto.AnimeRe
 		}
 	}
 
-	result, err := search.scraper.SearchAnime(*anime, pageStr)
+	result, err := search.scraper.SearchAnime(ctx, anime, pageStr)
 	if err != nil {
 		return result, err
 	}
@@ -61,9 +60,8 @@ func (search *searchService) SearchAnime(anime *string, page *uint) (dto.AnimeRe
 // Search obtiene todos los animes disponibles sin filtros de búsqueda con caché.
 // Intenta recuperar del caché primero, y si no está disponible, consulta al scraper
 // y almacena el resultado en caché para futuras solicitudes.
-func (search *searchService) Search() (dto.AnimeResponse, error) {
+func (search *searchService) Search(ctx context.Context) (dto.AnimeResponse, error) {
 	catcheKey := "search-anime-all"
-	ctx := context.Background()
 
 	var result dto.AnimeResponse
 
@@ -73,7 +71,7 @@ func (search *searchService) Search() (dto.AnimeResponse, error) {
 		}
 	}
 
-	result, err := search.scraper.Search()
+	result, err := search.scraper.Search(ctx)
 	if err != nil {
 		return result, err
 	}

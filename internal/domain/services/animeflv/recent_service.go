@@ -23,9 +23,8 @@ type recentService struct {
 // RecentAnime obtiene la lista de animes recientemente agregados con caché.
 // Intenta recuperar del caché primero, y si no está disponible, consulta al scraper
 // y almacena el resultado en caché para futuras solicitudes.
-func (recent *recentService) RecentAnime() ([]dto.AnimeStruct, error) {
+func (recent *recentService) RecentAnime(ctx context.Context) ([]dto.AnimeStruct, error) {
 	cacheKey := "recent-anime"
-	ctx := context.Background()
 
 	var result []dto.AnimeStruct
 	if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
@@ -34,7 +33,7 @@ func (recent *recentService) RecentAnime() ([]dto.AnimeStruct, error) {
 		}
 	}
 
-	result, err := recent.scraper.RecentAnime()
+	result, err := recent.scraper.RecentAnime(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -47,9 +46,8 @@ func (recent *recentService) RecentAnime() ([]dto.AnimeStruct, error) {
 // RecentEpisode obtiene la lista de episodios recientemente publicados con caché.
 // Intenta recuperar del caché primero, y si no está disponible, consulta al scraper
 // y almacena el resultado en caché para futuras solicitudes.
-func (recent *recentService) RecentEpisode() ([]dto.EpisodeListResponse, error) {
+func (recent *recentService) RecentEpisode(ctx context.Context) ([]dto.EpisodeListResponse, error) {
 	cacheKey := "recent-episode"
-	ctx := context.Background()
 
 	var result []dto.EpisodeListResponse
 	if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
@@ -58,7 +56,7 @@ func (recent *recentService) RecentEpisode() ([]dto.EpisodeListResponse, error) 
 		}
 	}
 
-	result, err := recent.scraper.RecentEpisode()
+	result, err := recent.scraper.RecentEpisode(ctx)
 	if err != nil {
 		return nil, err
 	}

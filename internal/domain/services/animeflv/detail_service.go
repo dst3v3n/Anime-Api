@@ -25,14 +25,13 @@ type detailService struct {
 // AnimeInfo obtiene información completa de un anime aplicando validaciones y caché.
 // Verifica que el ID no esté vacío, lo normaliza a minúsculas, intenta recuperar
 // del caché y, si no existe, consulta al scraper y almacena el resultado en caché.
-func (detail *detailService) AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, error) {
-	if *idAnime == "" {
+func (detail *detailService) AnimeInfo(ctx context.Context, idAnime string) (dto.AnimeInfoResponse, error) {
+	if idAnime == "" {
 		return dto.AnimeInfoResponse{}, fmt.Errorf("el ID del anime no puede estar vacío")
 	}
 
-	id := strings.ToLower(strings.TrimSpace(*idAnime))
+	id := strings.ToLower(strings.TrimSpace(idAnime))
 	cacheKey := fmt.Sprintf("anime-info-%s", id)
-	ctx := context.Background()
 
 	var result dto.AnimeInfoResponse
 	if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
@@ -41,7 +40,7 @@ func (detail *detailService) AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, 
 		}
 	}
 
-	result, err := detail.scraper.AnimeInfo(id)
+	result, err := detail.scraper.AnimeInfo(ctx, id)
 	if err != nil {
 		return dto.AnimeInfoResponse{}, err
 	}
@@ -55,14 +54,13 @@ func (detail *detailService) AnimeInfo(idAnime *string) (dto.AnimeInfoResponse, 
 // Valida que el ID del anime no esté vacío, normaliza a minúsculas, intenta recuperar
 // del caché y, si no existe, consulta al scraper y almacena el resultado en caché
 // para futuras solicitudes del mismo episodio.
-func (detail *detailService) Links(idAnime *string, episode *uint) (dto.LinkResponse, error) {
-	if *idAnime == "" {
+func (detail *detailService) Links(ctx context.Context, idAnime string, episode uint) (dto.LinkResponse, error) {
+	if idAnime == "" {
 		return dto.LinkResponse{}, fmt.Errorf("el ID del anime no puede estar vacío")
 	}
 
-	id := strings.ToLower(strings.TrimSpace(*idAnime))
-	cacheKey := fmt.Sprintf("links-%s-%d", id, *episode)
-	ctx := context.Background()
+	id := strings.ToLower(strings.TrimSpace(idAnime))
+	cacheKey := fmt.Sprintf("links-%s-%d", id, episode)
 
 	var result dto.LinkResponse
 	if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
@@ -71,7 +69,7 @@ func (detail *detailService) Links(idAnime *string, episode *uint) (dto.LinkResp
 		}
 	}
 
-	result, err := detail.scraper.Links(id, *episode)
+	result, err := detail.scraper.Links(ctx, id, episode)
 	if err != nil {
 		return dto.LinkResponse{}, err
 	}

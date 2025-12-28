@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/dst3v3n/api-anime/internal/ports"
@@ -35,7 +36,7 @@ func (v *Valkey) Get(ctx context.Context, key string, dest interface{}) error {
 
 	if error != nil {
 		if valkey.IsValkeyNil(error) {
-			return nil
+			return fmt.Errorf("key not found in cache")
 		}
 		return error
 	}
@@ -47,12 +48,22 @@ func (v *Valkey) Get(ctx context.Context, key string, dest interface{}) error {
 // Serializa el valor a JSON y lo guarda con una TTL de 15 minutos.
 // Retorna error si falla la serialización o la operación de almacenamiento.
 func (v *Valkey) Set(ctx context.Context, key string, value interface{}) error {
+	r, _ := regexp.Compile(`^\s*[\[{]`)
+
+	if value == nil {
+		return fmt.Errorf("cannot cache nil value")
+	}
+
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("error marshaling value: %w", err)
 	}
 
-	cmd := v.client.B().Set().Key(key).Value(string(data)).Ex(15 * time.Minute).Build()
+	if !r.Match(data) {
+		return fmt.Errorf("Error: valor no es serializable a JSON")
+	}
+
+	cmd := v.client.B().Set().Key(key).Value(string(data)).Ex(time.Hour).Build()
 	return v.client.Do(ctx, cmd).Error()
 }
 

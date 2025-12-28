@@ -107,6 +107,10 @@ func (p *Parser) ParseAnimeWithPagination(htmlElement io.Reader) (dto.AnimeRespo
 		}
 	})
 
+	if len(results.Animes) == 0 {
+		return results, fmt.Errorf("no se encontraron animes en el HTML proporcionado")
+	}
+
 	return results, nil
 }
 
@@ -127,6 +131,7 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 
 	doc.Find("script").Each(func(_ int, s *goquery.Selection) {
 		scriptContent := s.Text()
+
 		if strings.Contains(scriptContent, "var episodes") {
 			episodes, nextEpisode, err := episodeInfo(scriptContent)
 			if err != nil {
@@ -134,6 +139,7 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 				result.nextEpisode = ""
 				return
 			}
+
 			result.episodes = episodes
 			result.nextEpisode = nextEpisode
 		}
@@ -198,6 +204,10 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 		result.nextEpisode,
 	)
 
+	if len(resultFinal.Title) == 0 {
+		return dto.AnimeInfoResponse{}, fmt.Errorf("no se pudo parsear la información del anime del HTML proporcionado")
+	}
+
 	return resultFinal, nil
 }
 
@@ -229,6 +239,10 @@ func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum ui
 	doc.Find(selectorBodyContainer).Each(func(_ int, s *goquery.Selection) {
 		result.Title, _ = s.Find(selectorInfoTitle).Html()
 	})
+
+	if len(result.links) == 0 {
+		return dto.LinkResponse{}, fmt.Errorf("no se pudo parsear los enlaces del episodio del HTML proporcionado")
+	}
 
 	return p.mapper.ToLinkEpisode(result.ID, result.Title, result.Episode, result.links), nil
 }
@@ -262,5 +276,9 @@ func (p *Parser) ParseRecentEpisode(htmlElement io.Reader) ([]dto.EpisodeListRes
 
 		result = append(result, p.mapper.ToRecentEpisode(id, title, chapter, episode, image))
 	})
+
+	if len(result) == 0 {
+		return result, fmt.Errorf("no se encontraron episodios recientes en el HTML proporcionado")
+	}
 	return result, nil
 }
