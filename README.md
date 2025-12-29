@@ -128,16 +128,20 @@ for _, anime := range resultados.Animes {
 **Retorna:**
 
 ```go
-import "github.com/dst3v3n/api-anime/types"
+type AnimeResponse struct {
+    Animes     []AnimeStruct
+    TotalPages uint
+}
 
-// Usa directamente los tipos exportados desde la raíz
-resultados := dto.AnimeResponse{
-    Animes:     []types.AnimeStruct{...},
-    TotalPages: 5,
+type AnimeStruct struct {
+    ID          string        // "naruto-shippuden"
+    Title       string        // "Naruto Shippuden"
+    Sinopsis    string
+    Type        CategoryAnime // Anime, OVA, Pelicula, Especial
+    Punctuation float64       // 0-10
+    Image       string        // URL
 }
 ```
-
-Los tipos disponibles son `types.AnimeResponse` y `types.AnimeStruct`
 
 ---
 
@@ -168,20 +172,15 @@ for _, rel := range info.AnimeRelated {
 **Retorna:**
 
 ```go
-import "github.com/dst3v3n/api-anime/types"
-
-// Los tipos están disponibles desde el paquete types
-info := types.AnimeInfoResponse{
-    AnimeStruct:  types.AnimeStruct{...},
-    AnimeRelated: []types.AnimeRelated{...},
-    Genres:       []string{...},
-    Status:       ...,
-    NextEpisode:  "2025-01-15",
-    Episodes:     []int{1, 2, 3, ...},
+type AnimeInfoResponse struct {
+    AnimeStruct                   // Info básica
+    AnimeRelated []AnimeRelated   // Secuelas, precuelas
+    Genres       []string
+    Status       StatusAnime      // "En Emision" / "Finalizado"
+    NextEpisode  string
+    Episodes     []int            // [1, 2, 3, ..., 1150]
 }
 ```
-
-Los tipos disponibles son `types.AnimeInfoResponse` y `types.AnimeRelated`
 
 ---
 
@@ -209,18 +208,19 @@ for _, link := range links.Link {
 **Retorna:**
 
 ```go
-import "github.com/dst3v3n/api-anime/types"
+type LinkResponse struct {
+    ID      string
+    Title   string
+    Episode uint
+    Link    []LinkSource  // Enlaces de servicios externos
+}
 
-// Los tipos están disponibles desde el paquete types
-links := types.LinkResponse{
-    ID:      "one-piece-tv",
-    Title:   "One Piece",
-    Episode: 1150,
-    Link:    []types.LinkSource{...},
+type LinkSource struct {
+    Server string // Nombre del servicio: "Mega", "Zippyshare", "StreamSB", etc.
+    URL    string // URL directa al servicio externo
+    Code   string // Código embed (si aplica)
 }
 ```
-
-Los tipos disponibles son `types.LinkResponse` y `types.LinkSource`
 
 ---
 
