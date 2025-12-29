@@ -128,8 +128,10 @@ for _, anime := range resultados.Animes {
 **Retorna:**
 
 ```go
+import "github.com/dst3v3n/api-anime/types"
+
 type AnimeResponse struct {
-    Animes     []AnimeStruct
+    Animes     []types.AnimeStruct
     TotalPages uint
 }
 
@@ -142,6 +144,8 @@ type AnimeStruct struct {
     Image       string        // URL
 }
 ```
+
+Disponible en: `types.AnimeResponse` y `types.AnimeStruct`
 
 ---
 
@@ -172,6 +176,8 @@ for _, rel := range info.AnimeRelated {
 **Retorna:**
 
 ```go
+import "github.com/dst3v3n/api-anime/types"
+
 type AnimeInfoResponse struct {
     AnimeStruct                   // Info básica
     AnimeRelated []AnimeRelated   // Secuelas, precuelas
@@ -181,6 +187,8 @@ type AnimeInfoResponse struct {
     Episodes     []int            // [1, 2, 3, ..., 1150]
 }
 ```
+
+Disponible en: `types.AnimeInfoResponse` y `types.AnimeRelated`
 
 ---
 
@@ -208,11 +216,13 @@ for _, link := range links.Link {
 **Retorna:**
 
 ```go
+import "github.com/dst3v3n/api-anime/types"
+
 type LinkResponse struct {
     ID      string
     Title   string
     Episode uint
-    Link    []LinkSource  // Enlaces de servicios externos
+    Link    []types.LinkSource  // Enlaces de servicios externos
 }
 
 type LinkSource struct {
@@ -221,6 +231,8 @@ type LinkSource struct {
     Code   string // Código embed (si aplica)
 }
 ```
+
+Disponible en: `types.LinkResponse` y `types.LinkSource`
 
 ---
 

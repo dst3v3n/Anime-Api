@@ -2,7 +2,7 @@
 // Define alias de tipos para re-exportar los DTOs internos, permitiendo que los usuarios
 // utilicen estos tipos sin necesidad de importar paquetes internos (internal/).
 // Esto mantiene la abstracción y facilita cambios internos sin afectar la API pública.
-package anime
+package types
 
 import "github.com/dst3v3n/api-anime/internal/domain/dto"
 
