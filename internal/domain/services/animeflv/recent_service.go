@@ -16,8 +16,9 @@ import (
 // Implementa caché distribuido (Valkey) para almacenar temporalmente resultados
 // de animes y episodios recientes, mejorando el rendimiento de consultas repetidas.
 type recentService struct {
-	scraper ports.ScraperPort
-	cache   ports.CachePort
+	scraper     ports.ScraperPort
+	cache       ports.CachePort
+	enableCache bool
 }
 
 // RecentAnime obtiene la lista de animes recientemente agregados con caché.
@@ -26,10 +27,12 @@ type recentService struct {
 func (recent *recentService) RecentAnime(ctx context.Context) ([]dto.AnimeStruct, error) {
 	cacheKey := "recent-anime"
 
-	var result []dto.AnimeStruct
-	if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
-		if len(result) > 0 {
-			return result, nil
+	if recent.enableCache {
+		var result []dto.AnimeStruct
+		if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
+			if len(result) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -38,7 +41,9 @@ func (recent *recentService) RecentAnime(ctx context.Context) ([]dto.AnimeStruct
 		return nil, err
 	}
 
-	_ = recent.cache.Set(ctx, cacheKey, result)
+	if recent.enableCache {
+		_ = recent.cache.Set(ctx, cacheKey, result)
+	}
 
 	return result, nil
 }
@@ -49,10 +54,12 @@ func (recent *recentService) RecentAnime(ctx context.Context) ([]dto.AnimeStruct
 func (recent *recentService) RecentEpisode(ctx context.Context) ([]dto.EpisodeListResponse, error) {
 	cacheKey := "recent-episode"
 
-	var result []dto.EpisodeListResponse
-	if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
-		if len(result) > 0 {
-			return result, nil
+	if recent.enableCache {
+		var result []dto.EpisodeListResponse
+		if err := recent.cache.Get(ctx, cacheKey, &result); err == nil {
+			if len(result) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -61,7 +68,9 @@ func (recent *recentService) RecentEpisode(ctx context.Context) ([]dto.EpisodeLi
 		return nil, err
 	}
 
-	_ = recent.cache.Set(ctx, cacheKey, result)
+	if recent.enableCache {
+		_ = recent.cache.Set(ctx, cacheKey, result)
+	}
 
 	return result, nil
 }

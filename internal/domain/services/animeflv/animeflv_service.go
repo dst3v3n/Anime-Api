@@ -14,7 +14,6 @@ import (
 	"github.com/dst3v3n/api-anime/internal/config"
 	"github.com/dst3v3n/api-anime/internal/domain/dto"
 	"github.com/dst3v3n/api-anime/internal/ports"
-	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -24,7 +23,6 @@ import (
 // Integra caché distribuido (Valkey) en todos los sub-servicios para optimizar rendimiento.
 type AnimeflvService struct {
 	scraper ports.ScraperPort
-	logger  zerolog.Logger
 	search  searchService
 	recent  recentService
 	detail  detailService
@@ -36,7 +34,7 @@ type AnimeflvService struct {
 func NewAnimeflvService() *AnimeflvService {
 	scraper := animeflv.NewClient()
 
-	logger := config.NewConfig().Logging()
+	logger := config.GetLogger()
 	config, err := config.GetConfig()
 	if err != nil {
 		logger.Error().Err(err).Msg("Error al obtener la configuración de Valkey")
@@ -52,23 +50,25 @@ func NewAnimeflvService() *AnimeflvService {
 	}
 	return &AnimeflvService{
 		scraper: scraper,
-		logger:  logger,
 		search: searchService{
-			scraper: scraper,
-			cache:   cache.NewValkeyCache(client),
+			scraper:     scraper,
+			cache:       cache.NewValkeyCache(client),
+			enableCache: config.EnableCache,
 		},
 		recent: recentService{
-			scraper: scraper,
-			cache:   cache.NewValkeyCache(client),
+			scraper:     scraper,
+			cache:       cache.NewValkeyCache(client),
+			enableCache: config.EnableCache,
 		},
 		detail: detailService{
-			scraper: scraper,
-			cache:   cache.NewValkeyCache(client),
+			scraper:     scraper,
+			cache:       cache.NewValkeyCache(client),
+			enableCache: config.EnableCache,
 		},
 	}
 }
 
-// Search busca animes por nombre con paginación.
+// SearchAnime busca animes por nombre con paginación.
 // Delega la operación al servicio de búsqueda especializado.
 func (afs *AnimeflvService) SearchAnime(ctx context.Context, anime string, page uint) (dto.AnimeResponse, error) {
 	return afs.search.SearchAnime(ctx, anime, page)

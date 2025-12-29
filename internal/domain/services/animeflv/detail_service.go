@@ -18,8 +18,9 @@ import (
 // Utiliza caché distribuido (Valkey) para optimizar consultas recurrentes
 // y reduce la carga al scraper mediante almacenamiento temporal de resultados.
 type detailService struct {
-	scraper ports.ScraperPort
-	cache   ports.CachePort
+	scraper     ports.ScraperPort
+	cache       ports.CachePort
+	enableCache bool
 }
 
 // AnimeInfo obtiene información completa de un anime aplicando validaciones y caché.
@@ -33,10 +34,12 @@ func (detail *detailService) AnimeInfo(ctx context.Context, idAnime string) (dto
 	id := strings.ToLower(strings.TrimSpace(idAnime))
 	cacheKey := fmt.Sprintf("anime-info-%s", id)
 
-	var result dto.AnimeInfoResponse
-	if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
-		if len(result.ID) > 0 {
-			return result, nil
+	if detail.enableCache {
+		var result dto.AnimeInfoResponse
+		if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
+			if len(result.ID) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -45,7 +48,9 @@ func (detail *detailService) AnimeInfo(ctx context.Context, idAnime string) (dto
 		return dto.AnimeInfoResponse{}, err
 	}
 
-	_ = detail.cache.Set(ctx, cacheKey, result)
+	if detail.enableCache {
+		_ = detail.cache.Set(ctx, cacheKey, result)
+	}
 
 	return result, nil
 }
@@ -62,10 +67,12 @@ func (detail *detailService) Links(ctx context.Context, idAnime string, episode 
 	id := strings.ToLower(strings.TrimSpace(idAnime))
 	cacheKey := fmt.Sprintf("links-%s-%d", id, episode)
 
-	var result dto.LinkResponse
-	if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
-		if len(result.ID) > 0 {
-			return result, nil
+	if detail.enableCache {
+		var result dto.LinkResponse
+		if err := detail.cache.Get(ctx, cacheKey, &result); err == nil {
+			if len(result.ID) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -74,7 +81,9 @@ func (detail *detailService) Links(ctx context.Context, idAnime string, episode 
 		return dto.LinkResponse{}, err
 	}
 
-	_ = detail.cache.Set(ctx, cacheKey, result)
+	if detail.enableCache {
+		_ = detail.cache.Set(ctx, cacheKey, result)
+	}
 
 	return result, nil
 }

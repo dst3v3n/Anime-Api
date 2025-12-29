@@ -5,6 +5,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -27,6 +28,7 @@ type CacheConfig struct {
 	CachePassword string // Contraseña para autenticación en Valkey
 	CacheDB       int    // Número de base de datos Valkey
 	CacheTTL      int    // Tiempo de vida de los valores en caché (en minutos)
+	EnableCache   bool
 }
 
 // LogConfig contiene la configuración para el sistema de logging.
@@ -41,15 +43,38 @@ var (
 	loadErr  error
 )
 
-// NewConfig crea una nueva instancia de Config sin inicializar.
-func NewConfig() *Config {
-	return &Config{}
+// NewConfigWithDefaults crea una nueva instancia de Config con valores por defecto.
+// Retorna una Config preconfigurada sin necesidad de variables de entorno,
+// útil para testing o ejecución local sin configuración externa.
+func NewConfigWithDefaults() *Config {
+	return &Config{
+		AppName: "Anime-API",
+		CacheConfig: CacheConfig{
+			CacheHost:   "localhost",
+			CachePort:   6379,
+			CacheDB:     0,
+			CacheTTL:    60,
+			EnableCache: false,
+		},
+		LogConfig: LogConfig{
+			LogAppName: "Anime-API",
+			LogEnv:     "development",
+		},
+	}
 }
 
-// getEnvieroment carga la configuración desde variables de entorno y archivo .env.
-// Retorna una estructura Config con todos los parámetros cargados, o error si ocurre un problema.
-func (c *Config) getEnvieroment() (*Config, error) {
-	if err := loadEnvFile(); err != nil {
+// NewConfigFromEnv carga la configuración desde variables de entorno.
+// Intenta cargar un archivo .env si existe, pero continúa si no se encuentra.
+// Retorna un error si la validación de configuración falla.
+func NewConfigFromEnv() (*Config, error) {
+	return NewConfigFromEnvPath("")
+}
+
+// NewConfigFromEnvPath carga la configuración desde un archivo .env específico o variables de entorno.
+// Si envPath está vacío, intenta cargar desde la ruta por defecto.
+// Retorna error si el archivo existe pero no puede ser leído, o si la configuración no es válida.
+func NewConfigFromEnvPath(envPath string) (*Config, error) {
+	if err := loadEnvFileFromPath(envPath); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
@@ -57,7 +82,6 @@ func (c *Config) getEnvieroment() (*Config, error) {
 
 	cfg := &Config{
 		AppName: getEnv("APP_NAME", "Anime-API"),
-
 		CacheConfig: CacheConfig{
 			CacheHost:     getEnv("CACHE_HOST", "localhost"),
 			CachePort:     getEnvAsInt("CACHE_PORT", 6379),
@@ -65,39 +89,134 @@ func (c *Config) getEnvieroment() (*Config, error) {
 			CachePassword: getEnv("CACHE_PASSWORD", ""),
 			CacheDB:       getEnvAsInt("CACHE_DB", 0),
 			CacheTTL:      getEnvAsInt("CACHE_TTL", 3600),
+			EnableCache:   getEnvAsBool("CACHE_ENABLED", false),
 		},
-
 		LogConfig: LogConfig{
 			LogAppName: getEnv("LOG_APP_NAME", "MyApp"),
 			LogEnv:     getEnv("LOG_ENV", "development"),
 		},
 	}
 
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
 }
 
-// Logging retorna un logger configurado según el ambiente (development, staging, production).
-// Utiliza la configuración global para inicializar zerolog con los parámetros apropiados.
-func (c *Config) Logging() zerolog.Logger {
-	cfg, err := GetConfig()
-	if err != nil {
-		return zerolog.Logger{}
-	}
-	return logger.InitLogger(cfg.LogEnv, cfg.LogAppName)
+// WithCacheHost establece el host del servidor Valkey (caché distribuido).
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCacheHost(host string) *Config {
+	c.CacheHost = host
+	return c
 }
 
-// GetConfig retorna la instancia singleton de configuración.
-// Utiliza un patrón de sincronización (sync.Once) para garantizar que
-// la configuración se cargue una única vez desde variables de entorno y se valide.
-// Retorna error si la carga o validación falla.
-func GetConfig() (*Config, error) {
+// WithCachePort establece el puerto del servidor Valkey (por defecto 6379).
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCachePort(port int) *Config {
+	c.CachePort = port
+	return c
+}
+
+// WithCacheUsername establece el usuario para autenticación en Valkey.
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCacheUsername(username string) *Config {
+	c.CacheUsername = username
+	return c
+}
+
+// WithCachePassword establece la contraseña para autenticación en Valkey.
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCachePassword(password string) *Config {
+	c.CachePassword = password
+	return c
+}
+
+// WithCacheDB establece el número de base de datos Valkey (0-15, por defecto 0).
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCacheDB(db int) *Config {
+	c.CacheDB = db
+	return c
+}
+
+// WithCacheTTL establece el tiempo de vida de los valores en caché en minutos (por defecto 3600).
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCacheTTL(ttl int) *Config {
+	c.CacheTTL = ttl
+	return c
+}
+
+// WithCache establece si el caché está habilitado (deprecated, usa WithEnableCache).
+// Retorna la Config para encadenamiento de métodos según el patrón Builder.
+func (c *Config) WithCache(enabled bool) *Config {
+	c.EnableCache = enabled
+	return c
+}
+
+// InitConfig inicializa el singleton de configuración. Solo se puede ejecutar una vez.
+// Las siguientes llamadas son ignoradas si la instancia ya fue inicializada.
+// Retorna error si la configuración no valida o si el singleton ya fue inicializado con diferente Config.
+func InitConfig(cfg *Config) error {
+	var initErr error
 	once.Do(func() {
-		cfg := &Config{}
-		instance, loadErr = cfg.getEnvieroment()
-		if loadErr != nil {
+		if err := cfg.validate(); err != nil {
+			initErr = err
 			return
 		}
-		loadErr = instance.validate()
+		instance = cfg
+	})
+
+	if initErr != nil {
+		return initErr
+	}
+
+	if instance != cfg {
+		return fmt.Errorf("config singleton already initialized")
+	}
+
+	return nil
+}
+
+// GetConfig retorna la instancia singleton de Config, inicializándola desde variables de entorno si no existe.
+// Usa inicialización lazy con patrón once para garantizar que solo se carga una vez.
+// Retorna error si no puede cargar la configuración desde el entorno.
+func GetConfig() (*Config, error) {
+	once.Do(func() {
+		instance, loadErr = NewConfigFromEnv()
 	})
 	return instance, loadErr
+}
+
+// MustGetConfig retorna la instancia singleton de Config. Panica si hay error al cargar.
+// Útil cuando se espera que la configuración siempre esté disponible.
+func MustGetConfig() *Config {
+	cfg, err := GetConfig()
+	if err != nil {
+		panic(err)
+	}
+	return cfg
+}
+
+// ResetConfig reinicia el singleton de configuración.
+// Únicamente para uso en pruebas (testing). NO usar en producción.
+func ResetConfig() {
+	once = sync.Once{}
+	instance = nil
+	loadErr = nil
+}
+
+// Logging inicializa y retorna un logger de Zerolog configurado según los parámetros de Config.
+// El logger se configura con el entorno y nombre de aplicación especificados.
+func (c *Config) Logging() zerolog.Logger {
+	return logger.InitLogger(c.LogEnv, c.LogAppName)
+}
+
+// GetLogger retorna el logger global de la aplicación basado en la configuración.
+// Si hay error al obtener la configuración, retorna un logger con valores por defecto (development, Anime-API).
+func GetLogger() zerolog.Logger {
+	cfg, err := GetConfig()
+	if err != nil {
+		return logger.InitLogger("development", "Anime-API")
+	}
+	return cfg.Logging()
 }

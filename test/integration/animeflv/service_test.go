@@ -8,6 +8,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dst3v3n/api-anime/internal/config"
 	"github.com/dst3v3n/api-anime/internal/domain/services/animeflv"
 )
 
@@ -50,6 +51,7 @@ func TestSearchAnimeService(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		_ = config.MustGetConfig().WithCache(true)
 		serviceAnimeflv := animeflv.NewAnimeflvService()
 		ctx := context.Background()
 
@@ -155,13 +157,9 @@ func TestLinksService(t *testing.T) {
 			serviceAnimeflv := animeflv.NewAnimeflvService()
 			ctx := context.Background()
 
-			result, err := serviceAnimeflv.Links(ctx, tc.animeID, tc.episode)
+			_, err := serviceAnimeflv.Links(ctx, tc.animeID, tc.episode)
 			if (err != nil) != tc.wantError {
 				t.Errorf("error inesperado: got %v, want error: %v", err, tc.wantError)
-			}
-
-			if !tc.wantError {
-				t.Logf("Enlaces obtenidos: %+v", result)
 			}
 		})
 	}

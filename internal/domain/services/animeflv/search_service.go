@@ -18,8 +18,9 @@ import (
 // Implementa caché distribuido (Valkey) para optimizar búsquedas frecuentes
 // y reduce la carga al scraper mediante almacenamiento de resultados por página.
 type searchService struct {
-	scraper ports.ScraperPort
-	cache   ports.CachePort
+	scraper     ports.ScraperPort
+	cache       ports.CachePort
+	enableCache bool
 }
 
 // SearchAnime realiza una búsqueda de animes con validaciones, transformaciones y caché.
@@ -41,9 +42,11 @@ func (search *searchService) SearchAnime(ctx context.Context, anime string, page
 
 	var result dto.AnimeResponse
 
-	if err := search.cache.Get(ctx, cacheKey, &result); err == nil {
-		if len(result.Animes) > 0 {
-			return result, nil
+	if search.enableCache {
+		if err := search.cache.Get(ctx, cacheKey, &result); err == nil {
+			if len(result.Animes) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -52,7 +55,9 @@ func (search *searchService) SearchAnime(ctx context.Context, anime string, page
 		return result, err
 	}
 
-	_ = search.cache.Set(ctx, cacheKey, result)
+	if search.enableCache {
+		_ = search.cache.Set(ctx, cacheKey, result)
+	}
 
 	return result, nil
 }
@@ -65,9 +70,11 @@ func (search *searchService) Search(ctx context.Context) (dto.AnimeResponse, err
 
 	var result dto.AnimeResponse
 
-	if err := search.cache.Get(ctx, catcheKey, &result); err == nil {
-		if len(result.Animes) > 0 {
-			return result, nil
+	if search.enableCache {
+		if err := search.cache.Get(ctx, catcheKey, &result); err == nil {
+			if len(result.Animes) > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -76,7 +83,9 @@ func (search *searchService) Search(ctx context.Context) (dto.AnimeResponse, err
 		return result, err
 	}
 
-	_ = search.cache.Set(ctx, catcheKey, result)
+	if search.enableCache {
+		_ = search.cache.Set(ctx, catcheKey, result)
+	}
 
 	return result, nil
 }
