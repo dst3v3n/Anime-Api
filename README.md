@@ -48,7 +48,7 @@ import (
 
 func main() {
     // Usa configuración por defecto (caché desactivado)
-    service := anime.NewAnimeFlv()
+    service := apianime.NewAnimeFlv()
     ctx := context.Background()
     
     resultados, err := service.SearchAnime(ctx, "One Piece", 1)
@@ -89,7 +89,7 @@ func main() {
     
     config.InitConfig(cfg)
     
-    service := anime.NewAnimeFlv()
+    service := apianime.NewAnimeFlv()
     ctx := context.Background()
     
     // Primera búsqueda: ~2s (scraping)
@@ -336,7 +336,7 @@ CACHE_TTL=60    # minutos
 
 ```go
 // Carga automática
-service := anime.NewAnimeFlv()
+service := apianime.NewAnimeFlv()
 ```
 
 ### Opción 2: Configuración Programática (Recomendado)
@@ -353,7 +353,7 @@ cfg := config.NewConfigWithDefaults().
     WithCacheTTL(120)                   // 2 horas (en minutos)
 
 config.InitConfig(cfg)
-service := anime.NewAnimeFlv()
+service := apianime.NewAnimeFlv()
 ```
 
 ### Opción 3: Desde archivo .env personalizado
@@ -407,7 +407,7 @@ cfg := config.NewConfigWithDefaults().
 **Múltiples entornos:**
 
 ```go
-func newService(env string) *anime.AnimeFlv {
+func newService(env string) *apianime.AnimeFlv {
     var cfg *config.Config
     
     switch env {
@@ -424,7 +424,7 @@ func newService(env string) *anime.AnimeFlv {
     }
     
     config.InitConfig(cfg)
-    return anime.NewAnimeFlv()
+    return apianime.NewAnimeFlv()
 }
 ```
 
