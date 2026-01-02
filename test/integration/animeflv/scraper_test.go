@@ -66,11 +66,13 @@ func TestSearchScraper(t *testing.T) {
 		name        string
 		wantError   bool
 		description string
+		page        string
 	}{
 		{
 			name:        "Prueba búsqueda de todos los animes",
 			wantError:   false,
 			description: "debe buscar correctamente todos los animes sin errores",
+			page:        "1",
 		},
 	}
 
@@ -79,7 +81,7 @@ func TestSearchScraper(t *testing.T) {
 			scraperClient := animeflv.NewClient()
 			ctx := context.Background()
 
-			_, err := scraperClient.Search(ctx)
+			_, err := scraperClient.Search(ctx, tc.page)
 			if (err != nil) != tc.wantError {
 				t.Errorf("error inesperado en %s: got error = %v, want error = %v", tc.description, err != nil, tc.wantError)
 			}
@@ -173,9 +175,12 @@ func TestLinksScraper(t *testing.T) {
 			scraperClient := animeflv.NewClient()
 			ctx := context.Background()
 
-			_, err := scraperClient.Links(ctx, tc.animeID, tc.episode)
+			result, err := scraperClient.Links(ctx, tc.animeID, tc.episode)
 			if (err != nil) != tc.wantError {
 				t.Errorf("error inesperado en %s: got error = %v, want error = %v", tc.description, err != nil, tc.wantError)
+			}
+			if !tc.wantError {
+				t.Logf("Enlaces obtenidos en %s: %+v", tc.description, result)
 			}
 		})
 	}

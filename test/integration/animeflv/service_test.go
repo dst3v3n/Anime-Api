@@ -66,11 +66,13 @@ func TestSearchService(t *testing.T) {
 	testCases := []struct {
 		name        string
 		wantError   bool
+		page        uint
 		description string
 	}{
 		{
 			name:        "búsqueda de todos los animes exitosa",
 			wantError:   false,
+			page:        5,
 			description: "debe buscar correctamente todos los animes sin errores",
 		},
 	}
@@ -80,7 +82,7 @@ func TestSearchService(t *testing.T) {
 			serviceAnimeflv := animeflv.NewAnimeflvService()
 			ctx := context.Background()
 
-			_, err := serviceAnimeflv.Search(ctx)
+			_, err := serviceAnimeflv.Search(ctx, uint(tc.page))
 			if (err != nil) != tc.wantError {
 				t.Errorf("error inesperado: got %v, want error: %v", err, tc.wantError)
 			}

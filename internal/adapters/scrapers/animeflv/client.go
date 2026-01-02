@@ -77,9 +77,6 @@ func (c *Client) doRequest(ctx context.Context, url string) (*http.Response, err
 // Realiza una petición HTTP GET al endpoint de búsqueda de AnimeFlv
 // y delega el parsing del HTML al componente Parser.
 func (c *Client) SearchAnime(ctx context.Context, anime string, page string) (dto.AnimeResponse, error) {
-	if page == "" {
-		page = "1"
-	}
 	params := map[string]string{
 		"page": page,
 		"q":    anime,
@@ -99,8 +96,14 @@ func (c *Client) SearchAnime(ctx context.Context, anime string, page string) (dt
 // Search obtiene la lista de todos los animes disponibles sin filtros de búsqueda.
 // Realiza una petición HTTP GET a la página de búsqueda sin parámetros de consulta
 // y retorna todos los animes con información de paginación.
-func (c *Client) Search(ctx context.Context) (dto.AnimeResponse, error) {
-	resp, err := c.doRequest(ctx, c.config.SearchURL)
+func (c *Client) Search(ctx context.Context, page string) (dto.AnimeResponse, error) {
+	params := map[string]string{
+		"page": page,
+	}
+
+	searchURL := buildURL(c.config.SearchURL, params)
+
+	resp, err := c.doRequest(ctx, searchURL)
 	if err != nil {
 		return dto.AnimeResponse{}, err
 	}

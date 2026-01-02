@@ -65,7 +65,13 @@ func (search *searchService) SearchAnime(ctx context.Context, anime string, page
 // Search obtiene todos los animes disponibles sin filtros de búsqueda con caché.
 // Intenta recuperar del caché primero, y si no está disponible, consulta al scraper
 // y almacena el resultado en caché para futuras solicitudes.
-func (search *searchService) Search(ctx context.Context) (dto.AnimeResponse, error) {
+func (search *searchService) Search(ctx context.Context, page uint) (dto.AnimeResponse, error) {
+	if page == 0 {
+		page = 1
+	}
+
+	pageStr := fmt.Sprintf("%d", page)
+
 	catcheKey := "search-anime-all"
 
 	var result dto.AnimeResponse
@@ -78,7 +84,7 @@ func (search *searchService) Search(ctx context.Context) (dto.AnimeResponse, err
 		}
 	}
 
-	result, err := search.scraper.Search(ctx)
+	result, err := search.scraper.Search(ctx, pageStr)
 	if err != nil {
 		return result, err
 	}

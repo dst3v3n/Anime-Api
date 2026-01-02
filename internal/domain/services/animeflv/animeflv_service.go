@@ -76,8 +76,8 @@ func (afs *AnimeflvService) SearchAnime(ctx context.Context, anime string, page 
 
 // Search obtiene todos los animes disponibles sin filtros de búsqueda.
 // Delega la operación al servicio de búsqueda especializado con caché integrado.
-func (afs *AnimeflvService) Search(ctx context.Context) (dto.AnimeResponse, error) {
-	return afs.search.Search(ctx)
+func (afs *AnimeflvService) Search(ctx context.Context, page uint) (dto.AnimeResponse, error) {
+	return afs.search.Search(ctx, page)
 }
 
 // AnimeInfo obtiene información detallada de un anime específico por su ID.

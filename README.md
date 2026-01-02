@@ -13,6 +13,7 @@ Incluye **caché distribuido opcional** con Valkey/Redis para optimizar consulta
 - 🔍 **Búsqueda de animes** por nombre con paginación
 - 📖 **Información completa** - Sinopsis, géneros, estado, episodios, animes relacionados
 - 🎬 **Enlaces de episodios** - URLs de servicios externos (Mega, Zippyshare, StreamSB, etc.)
+- 🎥 **Extracción de URLs** - Obtén URLs directas de reproducción (⚡ NEW - StreamTape soportado, más servicios próximamente)
 - 📺 **Animes recientes** - Últimos agregados al sitio
 - 🆕 **Episodios recientes** - Últimos episodios publicados
 - 💾 **Caché opcional** - Configurable, desactivable, TTL personalizable
@@ -233,6 +234,104 @@ type LinkSource struct {
 ```
 
 Disponible en: `types.LinkResponse` y `types.LinkSource`
+
+---
+
+### ExtractUrl ⚡ NUEVO
+
+Extrae la URL directa de reproducción desde una página embebida de video. **Actualmente disponible solo para StreamTape**, con soporte para más servicios próximamente.
+
+```go
+ExtractUrl(ctx context.Context, url string) (string, error)
+```
+
+**Ejemplo:**
+
+```go
+import (
+    "github.com/dst3v3n/api-anime/extract"
+)
+
+// URL del reproductor embebido de StreamTape
+embedURL := "https://streamtape.com/e/PWw1erZpe1FG87/"
+
+// Extraer URL directa
+videoURL, err := extract.ExtractUrl(ctx, embedURL)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Println("URL del video:", videoURL)
+// Output: https://streamtape.com/get_video?id=...
+```
+
+**Características:**
+
+- 🎬 Extrae URLs directas desde reproductores embebidos
+- 🤖 Usa automatización de navegador (Chromedp/Chrome headless)
+- ⏱️ Tiempo de extracción: ~3-5 segundos
+- 🔄 Requiere Chrome/Chromium instalado en el sistema
+
+**Servicios Soportados:**
+
+| Servicio | Estado | Notas |
+|----------|--------|-------|
+| StreamTape | ✅ Disponible | Actualmente soportado |
+| Mega | ⏳ Próximamente | En desarrollo |
+| Zippyshare | ⏳ Próximamente | En desarrollo |
+| Google Drive | ⏳ Próximamente | En desarrollo |
+
+**Requisitos:**
+
+```bash
+# Chrome o Chromium debe estar instalado en el sistema
+# En Linux
+sudo apt-get install chromium-browser
+
+# En macOS
+brew install chromium
+
+# En Windows
+# Descargar desde: https://www.chromium.org/
+```
+
+**Uso Completo - Obtener enlaces y extraer URLs:**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/dst3v3n/api-anime"
+    "github.com/dst3v3n/api-anime/extract"
+)
+
+func main() {
+    service := apianime.NewAnimeFlv()
+    ctx := context.Background()
+    
+    // 1. Obtener enlaces del episodio
+    links, _ := service.Links(ctx, "one-piece-tv", 1150)
+    
+    // 2. Buscar servidor StreamTape
+    for _, link := range links.Link {
+        if link.Server == "StreamTape" {
+            fmt.Printf("Encontrado: %s\n", link.URL)
+            
+            // 3. Extraer URL directa
+            videoURL, err := extract.ExtractUrl(ctx, link.URL)
+            if err != nil {
+                fmt.Println("Error:", err)
+                continue
+            }
+            
+            fmt.Println("URL del video:", videoURL)
+            break
+        }
+    }
+}
+```
 
 ---
 

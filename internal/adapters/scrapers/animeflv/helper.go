@@ -97,7 +97,15 @@ func buildURL(baseURL string, params map[string]string) string {
 }
 
 // parseUint convierte una cadena a uint con validación.
-// Retorna error si la cadena no tiene un formato numérico válido o es un número negativo.
+// parseUint convierte una cadena a uint con validación.
+// Valida que la cadena tenga un formato numérico válido y sea un número no-negativo.
+// Si la conversión es exitosa, retorna el valor como uint; de lo contrario, retorna error.
+// Parámetros:
+//   - value: cadena a convertir (ej: "5", "100", "99999")
+//
+// Retorna:
+//   - uint: valor numérico sin signo convertido
+//   - error: error si la cadena está vacía, contiene caracteres no numéricos, o es un número negativo
 func parseUint(value string) (uint, error) {
 	parsed, err := strconv.ParseUint(value, 10, 64)
 	if err != nil {

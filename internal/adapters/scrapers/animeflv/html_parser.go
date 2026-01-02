@@ -70,6 +70,26 @@ func (p *Parser) ParseAnime(htmlElement io.Reader) ([]dto.AnimeStruct, error) {
 	return result.Animes, nil
 }
 
+// ParseAnimeWithPagination extrae información de animes desde HTML con soporte de paginación.
+// Utilizado tanto para resultados de búsqueda como para animes recientes.
+// Proceso:
+//  1. Parsea el HTML proporcionado en un documento goquery
+//  2. Busca todos los artículos de anime usando selectores CSS
+//  3. Para cada artículo extrae:
+//     - ID desde el atributo href del enlace
+//     - Título del anime
+//     - Sinopsis descripción
+//     - Tipo/Categoría (Anime, Película, OVA, Especial)
+//     - Puntuación/Calificación
+//     - URL de la imagen
+//  4. Mapea cada elemento a AnimeStruct
+//  5. Extrae información de paginación buscando el número de la penúltima página
+//  6. Retorna error si no encuentra animes en el HTML
+//
+// Parámetros:
+//   - htmlElement: reader del HTML con información de animes
+//
+// Retorna: AnimeResponse con lista de animes, número total de páginas, y error si falla
 func (p *Parser) ParseAnimeWithPagination(htmlElement io.Reader) (dto.AnimeResponse, error) {
 	results := dto.AnimeResponse{}
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
@@ -211,9 +231,23 @@ func (p *Parser) ParseAnimeInfo(htmlElement io.Reader, idAnime string) (dto.Anim
 	return resultFinal, nil
 }
 
-// ParseLinks extrae los enlaces de reproducción de un episodio.
-// Analiza scripts JavaScript embebidos para obtener URLs de múltiples servidores
-// de video (Zippyshare, Mega, etc.) junto con sus códigos de embed.
+// ParseLinks extrae los enlaces de reproducción de un episodio específico.
+// Analiza scripts JavaScript embebidos en la página para obtener URLs de múltiples servidores
+// de video (Zippyshare, Mega, Google Drive, etc.) junto con sus códigos de embed.
+// Proceso:
+//  1. Parsea el HTML de la página de reproducción
+//  2. Busca etiquetas <script> que contienen la variable "var videos"
+//  3. Utiliza scriptLinksEpisode() para extraer y parsear el JSON embebido
+//  4. Extrae el título del anime del HTML
+//  5. Valida que se hayan encontrado enlaces, retorna error si no hay
+//  6. Mapea los resultados a LinkResponse
+//
+// Parámetros:
+//   - htmlElement: reader del HTML de la página de reproducción del episodio
+//   - idAnime: identificador del anime
+//   - episodeNum: número del episodio
+//
+// Retorna: LinkResponse con título, número de episodio y lista de enlaces, o error si falla
 func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum uint) (dto.LinkResponse, error) {
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {
@@ -247,9 +281,24 @@ func (p *Parser) ParseLinks(htmlElement io.Reader, idAnime string, episodeNum ui
 	return p.mapper.ToLinkEpisode(result.ID, result.Title, result.Episode, result.links), nil
 }
 
-// ParseRecentEpisode extrae la lista de episodios recientemente publicados.
-// Obtiene información resumida de cada episodio: ID del anime, título, capítulo,
-// número de episodio e imagen de portada.
+// ParseRecentEpisode extrae la lista de episodios recientemente publicados desde la página principal.
+// Obtiene información resumida de cada episodio para mostrar en listados recientes.
+// Proceso:
+//  1. Parsea el HTML de la página principal de AnimeFlv
+//  2. Busca elementos <li> dentro del selector selectorEpisodeList
+//  3. Para cada elemento, extrae:
+//     - ID del anime desde el href (con normalización para remover número de episodio)
+//     - Número de episodio desde el href
+//     - Título del anime
+//     - Designación del capítulo (ej: "Cap. 1050")
+//     - URL de la imagen de portada
+//  4. Utiliza el mapper para crear estructuras EpisodeListResponse
+//  5. Retorna error si no encuentra ningún episodio reciente
+//
+// Parámetros:
+//   - htmlElement: reader del HTML de la página principal
+//
+// Retorna: slice de EpisodeListResponse con información resumida de episodios recientes
 func (p *Parser) ParseRecentEpisode(htmlElement io.Reader) ([]dto.EpisodeListResponse, error) {
 	doc, err := goquery.NewDocumentFromReader(htmlElement)
 	if err != nil {

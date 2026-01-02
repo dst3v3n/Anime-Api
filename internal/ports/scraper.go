@@ -17,7 +17,7 @@ import (
 // ScraperPort define el contrato que debe cumplir cualquier scraper de anime
 type ScraperPort interface {
 	SearchAnime(ctx context.Context, anime string, page string) (dto.AnimeResponse, error)
-	Search(ctx context.Context) (dto.AnimeResponse, error)
+	Search(ctx context.Context, page string) (dto.AnimeResponse, error)
 	AnimeInfo(ctx context.Context, idAnime string) (dto.AnimeInfoResponse, error)
 	Links(ctx context.Context, idAnime string, episode uint) (dto.LinkResponse, error)
 	RecentAnime(ctx context.Context) ([]dto.AnimeStruct, error)

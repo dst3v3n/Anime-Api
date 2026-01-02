@@ -10,6 +10,7 @@ package animeflv
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 
 	"github.com/dst3v3n/api-anime/internal/domain/dto"
@@ -66,6 +67,15 @@ func scriptLinksEpisode(scriptContent string) ([]dto.LinkSource, error) {
 			return nil, fmt.Errorf("error al parsear JSON de enlaces de video: %w", err)
 		}
 		for _, linkVideo := range videos.SUB {
+			parsedURL, err := url.Parse(linkVideo.URL)
+			if err == nil {
+				linkVideo.URL = parsedURL.String()
+			}
+
+			parsedCode, err := url.Parse(linkVideo.Code)
+			if err == nil {
+				linkVideo.Code = parsedCode.String()
+			}
 			toLinkSource = append(toLinkSource, dto.LinkSource{
 				Server: linkVideo.Server,
 				URL:    linkVideo.URL,
